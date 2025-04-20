@@ -25,7 +25,7 @@ def worker():
         try:
             print(f"[Worker] Processing story: {story_name}")
             processor.run(story_prompt, story_name)
-            run_pipeline("./mindset_story")
+            run_pipeline(f"{story_name}")
             print(f"[Worker] Completed: {story_name}")
         except Exception as e:
             print(f"[Worker] Error processing story {story_name}: {e}")
