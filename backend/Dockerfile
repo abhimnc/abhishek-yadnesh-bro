@@ -30,7 +30,10 @@ RUN git clone https://github.com/xinntao/Real-ESRGAN.git /Real-ESRGAN && \
 # Copy application
 COPY . .
 RUN pip install flask
-RUN pip install --upgrade torchvision
+# After installing basicsr and torchvision
+RUN sed -i 's/from torchvision\.transforms\.functional_tensor/from torchvision.transforms.functional/' \
+    /usr/local/lib/python3.10/site-packages/basicsr/data/degradations.py
+
 RUN rm -rf /root/.cache/whisper/*
 EXPOSE 5000
 CMD ["python", "app.py"]
