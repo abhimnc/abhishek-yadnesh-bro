@@ -10,12 +10,8 @@ story_gen = StoryGenerator()
 image_gen = ImagePromptGenerator()
 processor = StoryProcessor(story_gen, image_gen)
 
-@app.route("/generate", methods=["POST"])
-def generate():
-    data = request.json
-    story_prompt = data.get("story_prompt")
-    story_name = data.get("story_name")
-
+@app.route("/generate/<string:story_prompt>/<string:story_name>/", methods=["GET"])
+def generate(story_prompt, story_name):
     if not story_prompt or not story_name:
         return jsonify({"error": "Missing story_prompt or story_name"}), 400
 
@@ -25,6 +21,8 @@ def generate():
         return jsonify({"status": "success", "message": "Story generated."})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+    
+
 
 @app.route("/health", methods=["GET"])
 def health_check():
