@@ -1,0 +1,21 @@
+openai
+requests
+pandas
+numpy
+soundfile
+openai
+transformers
+sentencepiece
+datasets
+torch
+git+https://github.com/huggingface/transformers
+git+https://github.com/linto-ai/whisper-timestamped
+basicsr
+facexlib
+gfpgan
+openai
+basicsr
+# facexlib and gfpgan are for face enhancement
+facexlib
+gfpgan
+openai-whisper
