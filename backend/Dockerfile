@@ -18,13 +18,14 @@ COPY requirements.txt .
 RUN pip install --upgrade "pip<24.1" setuptools wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
+WORKDIR /app
 # Install Real-ESRGAN
 RUN git clone https://github.com/xinntao/Real-ESRGAN.git /Real-ESRGAN && \
     pip install basicsr facexlib gfpgan && \
     pip install -r /Real-ESRGAN/requirements.txt && \
     cd /Real-ESRGAN && python setup.py develop
 
-WORKDIR /app
+
 # Copy application
 COPY . .
 RUN pip install flask
