@@ -28,6 +28,6 @@ WORKDIR /app
 # Copy application
 COPY . .
 RUN pip install flask
-
+RUN rm -rf /root/.cache/whisper/*
 EXPOSE 5000
 CMD ["python", "app.py"]
