@@ -27,7 +27,7 @@ RUN git clone https://github.com/xinntao/Real-ESRGAN.git /Real-ESRGAN && \
 WORKDIR /app
 # Copy application
 COPY . .
-
+RUN pip install flask
 
 EXPOSE 5000
 CMD ["python", "app.py"]
