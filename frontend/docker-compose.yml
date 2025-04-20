@@ -7,6 +7,5 @@ services:
       - "80:80"
     restart: unless-stopped
     # docker-compose.yml
-    environment:
-      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    
 
