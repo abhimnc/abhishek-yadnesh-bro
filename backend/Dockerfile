@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install --upgrade pip
 
 # Copy requirements
-COPY backend/requirements.txt .
+COPY requirements.txt .
 
 # Install base Python dependencies
 RUN pip3 install --no-cache-dir -r requirements.txt
@@ -28,7 +28,7 @@ RUN git clone https://github.com/xinntao/Real-ESRGAN.git /app/Real-ESRGAN && \
     cd /app/Real-ESRGAN && python3 setup.py develop
 
 # Copy app source code
-COPY backend/ .
+COPY . .
 
 # Expose Flask port
 EXPOSE 5000
