@@ -1,9 +1,7 @@
-openai
 requests
 pandas
 numpy
 soundfile
-openai
 transformers
 sentencepiece
 datasets
@@ -19,3 +17,4 @@ basicsr
 facexlib
 gfpgan
 openai-whisper
+openai
