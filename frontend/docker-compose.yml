@@ -4,5 +4,5 @@ services:
   streamlit-ui:
     build: .
     ports:
-      - "8501:8501"
+      - "80:80"
     restart: unless-stopped
