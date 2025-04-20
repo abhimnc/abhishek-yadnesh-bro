@@ -19,8 +19,7 @@ def trigger_payment():
     # Simulate Juspay link creation (you'd integrate Juspay's API here)
     payment_link = "https://juspay.in/fake_payment_link"
     st.markdown(f"🔗 [Click here to pay ₹20 to unlock more prompts]({payment_link})")
-    # In reality, after payment success, you’d update the backend or session
-    # Simulating payment success for now
+    
     if st.button("I've Paid"):
         st.session_state.paid = True
         st.success("🎉 Payment confirmed! You can now generate unlimited stories.")
@@ -31,15 +30,22 @@ if st.button("Generate Story"):
     else:
         if st.session_state.prompt_count < 2 or st.session_state.paid:
             with st.spinner("Generating multimedia story..."):
-                response = requests.post(
-                    "http://142.170.89.97:23028/generate/{story_prompt}/{story_name}/",
-                    headers={"Content-Type": "application/json"}
-                )
-                if response.ok:
-                    st.success("✅ Story and multimedia generated!")
-                    st.session_state.prompt_count += 1
-                else:
-                    st.error(f"❌ Failed: {response.json().get('message')}")
+                try:
+                    url = f"http://142.170.89.97:23028/generate/{story_prompt}/{story_name}/"
+                    response = requests.post(
+                        url,
+                        headers={"Content-Type": "application/json"}
+                    )
+                    if response.ok:
+                        st.success("✅ Story and multimedia generated!")
+                        st.session_state.prompt_count += 1
+                    else:
+                        try:
+                            st.error(f"❌ Failed: {response.json().get('message', 'Unknown error')}")
+                        except:
+                            st.error("❌ Failed to generate story.")
+                except Exception as e:
+                    st.error(f"⚠️ Error: {str(e)}")
         else:
             st.warning("⚠️ You have used your 2 free prompts.")
             trigger_payment()
