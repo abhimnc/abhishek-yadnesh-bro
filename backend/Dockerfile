@@ -22,7 +22,7 @@ RUN pip3 install --upgrade "pip<24.1" setuptools wheel
 RUN pip3 install numpy pandas
 
 # Copy and install main requirements
-COPY backend/requirements.txt .
+COPY requirements.txt .
 RUN pip3 install --prefer-binary --no-cache-dir -r requirements.txt
 
 # Clone and install Real-ESRGAN and dependencies
