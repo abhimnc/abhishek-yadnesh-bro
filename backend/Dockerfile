@@ -19,11 +19,13 @@ RUN pip install --upgrade "pip<24.1" setuptools wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
 WORKDIR /app
-# Install Real-ESRGAN
-RUN git clone https://github.com/xinntao/Real-ESRGAN.git /Real-ESRGAN && \
+
+# Install Real-ESRGAN inside /app
+RUN git clone https://github.com/xinntao/Real-ESRGAN.git Real-ESRGAN && \
     pip install basicsr facexlib gfpgan && \
-    pip install -r /Real-ESRGAN/requirements.txt && \
-    cd /Real-ESRGAN && python setup.py develop
+    pip install -r Real-ESRGAN/requirements.txt && \
+    cd Real-ESRGAN && python setup.py develop
+
 
 
 # Copy application
