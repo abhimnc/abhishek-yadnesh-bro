@@ -29,5 +29,5 @@ WORKDIR /app
 COPY . .
 RUN pip install flask
 RUN rm -rf /root/.cache/whisper/*
-EXPOSE 741641
+EXPOSE 8080
 CMD ["python", "app.py"]
