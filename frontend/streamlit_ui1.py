@@ -31,7 +31,7 @@ if st.button("Generate Story"):
         if st.session_state.prompt_count < 2 or st.session_state.paid:
             with st.spinner("Generating multimedia story..."):
                 try:
-                    url = f"http://173.185.79.174:45165/generate/{story_prompt}/{story_name}/"
+                    url = f"http://173.185.79.174:45199/generate/{story_prompt}/{story_name}/"
                     response = requests.post(
                         url,
                         headers={"Content-Type": "application/json"}
