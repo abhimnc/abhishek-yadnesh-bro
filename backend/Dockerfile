@@ -24,9 +24,10 @@ RUN git clone https://github.com/xinntao/Real-ESRGAN.git /Real-ESRGAN && \
     pip install -r /Real-ESRGAN/requirements.txt && \
     cd /Real-ESRGAN && python setup.py develop
 
-# Copy application
-COPY backend/ /app
 WORKDIR /app
+# Copy application
+COPY . .
+
 
 EXPOSE 5000
 CMD ["python", "app.py"]
