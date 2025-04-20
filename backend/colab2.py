@@ -106,20 +106,20 @@ def extract_word_timings(audio_path):
 
 
 
-def optionally_correct_subtitles(words):
-    for idx, word in enumerate(words):
-        print(idx, word)
-    inp = input("Enter corrections in format 'index:new_word' (comma separated), or press Enter to skip:\n")
-    if not inp.strip():
-        return words
-    for part in inp.split(','):
-        index, new_word = part.split(':')
-        words[int(index)]["text"] = new_word.strip()
-    return words
+# def optionally_correct_subtitles(words):
+#     for idx, word in enumerate(words):
+#         print(idx, word)
+#     # inp = input("Enter corrections in format 'index:new_word' (comma separated), or press Enter to skip:\n")
+#     # if not inp.strip():
+#     #     return words
+#     for part in inp.split(','):
+#         index, new_word = part.split(':')
+#         words[int(index)]["text"] = new_word.strip()
+#     return words
 
 def generate_subtitles(audio_path, save_path):
     words = extract_word_timings(audio_path)
-    words = optionally_correct_subtitles(words)
+    # words = optionally_correct_subtitles(words)
     with open(save_path, 'w') as f:
         json.dump(words, f)
     return words
