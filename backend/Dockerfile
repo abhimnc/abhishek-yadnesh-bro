@@ -26,9 +26,11 @@ RUN git clone https://github.com/xinntao/Real-ESRGAN.git /Real-ESRGAN && \
     cd /Real-ESRGAN && python setup.py develop
 
 
+
 # Copy application
 COPY . .
 RUN pip install flask
+RUN pip install --upgrade torchvision
 RUN rm -rf /root/.cache/whisper/*
 EXPOSE 5000
 CMD ["python", "app.py"]
