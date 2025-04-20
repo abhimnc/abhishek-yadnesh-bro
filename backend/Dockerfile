@@ -25,7 +25,7 @@ RUN git clone https://github.com/xinntao/Real-ESRGAN.git /Real-ESRGAN && \
     cd /Real-ESRGAN && python setup.py develop
 
 # Copy application
-COPY . /app
+COPY backend/ /app
 WORKDIR /app
 
 EXPOSE 5000
