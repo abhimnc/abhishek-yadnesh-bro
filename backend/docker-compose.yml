@@ -16,5 +16,5 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-      - INTERACTIVE=true 
+      - INTERACTIVE=false
     runtime: nvidia
