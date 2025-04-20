@@ -1,15 +1,22 @@
-FROM nvidia/cuda:11.7.1-cudnn8-runtime-ubuntu20.04
-
+# FROM nvidia/cuda:11.7.1-cudnn8-runtime-ubuntu20.04
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    python3-pip \
-    python3-dev \
-    git \
+    python3.10 \
+    python3.10-dev \
+    python3.10-distutils \
     curl \
+    git \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.10 as default
+RUN ln -sf /usr/bin/python3.10 /usr/bin/python && ln -sf /usr/bin/python3.10 /usr/bin/python3
+
+# Install pip for Python 3.10
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 
 # Install Rust (required for tokenizers)
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
