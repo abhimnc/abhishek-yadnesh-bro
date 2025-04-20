@@ -19,7 +19,7 @@ WHISPER_MODEL = whisper.load_model("large", device=device1)
 # === Image Processing ===
 def upscale_image(image_path, output_dir):
     try:
-        command = f'python ./Real-ESRGAN/inference_realesrgan.py -n RealESRGAN_x4plus -i "{image_path}" -o "{output_dir}"'
+        command = f'python ../Real-ESRGAN/inference_realesrgan.py -n RealESRGAN_x4plus -i "{image_path}" -o "{output_dir}"'
         os.system(command)
         print(f'Upscaled: {image_path} -> {output_dir}')
     except Exception as e:
