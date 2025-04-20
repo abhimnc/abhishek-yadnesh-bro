@@ -134,6 +134,9 @@ def generate_all_subtitles(base_path):
         if not os.path.exists(subtitle_path):
             generate_subtitles(audio_path, subtitle_path)
 
+    del model
+    torch.cuda.empty_cache()
+
 # === SRT Creation ===
 def format_timestamp(t):
     sec = int(t)
