@@ -27,7 +27,7 @@ def worker():
             processor.run(story_prompt, story_name)
             run_pipeline(f"{story_name}")
             print(f"[Worker] Completed: {story_name}")
-            create_video_from_images_with_audio( image_dir=f"{story_name}", audio_file=f"{story_name}/adam.mp3",output_file=f"{story_name}/{story_name}_story_video.mp4")
+            create_video_from_images_with_audio( image_dir=f"{story_name}/upscaled_images/", audio_file=f"{story_name}/adam.mp3",output_file=f"{story_name}/story_video.mp4")
         except Exception as e:
             print(f"[Worker] Error processing story {story_name}: {e}")
         request_queue.task_done()
