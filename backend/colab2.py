@@ -3,6 +3,7 @@ import json
 import requests
 import whisper
 import torch
+import logging
 # === Configs ===
 VOICE_IDS = {
     "quiz": "fMpuMtuBbLqzac6r00Am",
@@ -21,20 +22,20 @@ def upscale_image(image_path, output_dir):
     try:
         command = f'python ../Real-ESRGAN/inference_realesrgan.py -n RealESRGAN_x4plus -i "{image_path}" -o "{output_dir}"'
         os.system(command)
-        print(f'Upscaled: {image_path} -> {output_dir}')
+        logging.info(f'Upscaled: {image_path} -> {output_dir}')
     except Exception as e:
-        print(f'Upscaling failed for {image_path}: {e}')
+        logging.info(f'Upscaling failed for {image_path}: {e}')
 
 def process_images(base_path): 
     quiz_dir_path = os.path.join(base_path)
-    print(quiz_dir_path)
+    logging.info(quiz_dir_path)
     upscaled_dir = os.path.join(quiz_dir_path, "upscaled_images")
     os.makedirs(upscaled_dir, exist_ok=True)
 
     images = [f for f in os.listdir(quiz_dir_path) if f.endswith(".png")]
     for image in images:
         image_path = os.path.join(quiz_dir_path, image)
-        print(f'Processing image: {image_path}')
+        logging.info(f'Processing image: {image_path}')
         upscale_image(image_path, upscaled_dir)
 
 # === Audio Processing ===
@@ -67,21 +68,21 @@ def convert_text_to_speech(text, voice_id, output_path):
     if response.status_code == 200:
         with open(output_path, 'wb') as f:
             f.write(response.content)
-        print(f'Audio saved: {output_path}')
+        logging.info(f'Audio saved: {output_path}')
     else:
-        print(f'Failed to generate audio: {response.status_code} - {response.text}')
+        logging.info(f'Failed to generate audio: {response.status_code} - {response.text}')
 
 def generate_audio_files(base_path, voice_name="adam"):
     dir_path = os.path.join(base_path)
     json_file = next((f for f in os.listdir(dir_path) if f.endswith(".json")), None)
-    print(f"------------------------------------------------------generate_audio_files:")
+    logging.info(f"------------------------------------------------------generate_audio_files:")
     if json_file:
         script = create_script(os.path.join(dir_path, json_file))
         audio_path = os.path.join(dir_path, f"{voice_name}.mp3")
-        print(f"Audio path: {audio_path}-------------------------------------")
+        logging.info(f"Audio path: {audio_path}-------------------------------------")
         if not os.path.exists(audio_path):
 
-            print(f"Audio file does not exist, generating: {audio_path}")
+            logging.info(f"Audio file does not exist, generating: {audio_path}")
             convert_text_to_speech(script, VOICE_IDS[voice_name], audio_path)
 
 # === Subtitle Processing ===
@@ -92,7 +93,7 @@ def extract_word_timings(audio_path):
     words = []
     for segment in result.get("segments", []):
         segment_words = segment.get("words", [])
-        print([w.keys() for w in segment_words])
+        logging.info([w.keys() for w in segment_words])
 
         for w in segment_words:
             if all(k in w for k in ("word", "start", "end")):
@@ -103,7 +104,7 @@ def extract_word_timings(audio_path):
                     "confidence": float(w.get("probability", 1.0))  # mapped + fallback
                 })
             else:
-                print(f"Skipping malformed word entry: {w}")
+                logging.info(f"Skipping malformed word entry: {w}")
     
     return words
 
@@ -156,18 +157,18 @@ def get_words_and_time(model, speech):
 def correct_subtitles(text_timestamped):
   len_out = len(text_timestamped)
   for i in range(len_out):
-    print(i, text_timestamped[i])
+    logging.info(i, text_timestamped[i])
   ip = input()
   if ip.strip() == '':
     return text_timestamped
   else:
     to_change = [(int(i.split(':')[0].strip()), i.split(':')[1].strip()) for i in ip.split(',')]
     for ind, new_word in to_change:
-      print('ind', ind, 'new_word', new_word)
+      logging.info('ind', ind, 'new_word', new_word)
       new_word_dict = {}
       new_word_dict[new_word] = list(text_timestamped[ind].values())[0]
       text_timestamped[ind] = new_word_dict
-    print('text_timestamped', text_timestamped)
+    logging.info('text_timestamped', text_timestamped)
     return text_timestamped
 
 def make_text_timestamped(audio_path, save_path):
@@ -212,16 +213,16 @@ def generate_srt_files(base_path):
 
 # === Runner ===
 def run_pipeline(base_path):
-    # print("Upscaling images...")
+    logging.info("Upscaling images...")
     process_images(base_path)
 
-    # print("Generating audio...")
+    logging.info("Generating audio...")
     generate_audio_files(base_path)
 
-    # print("Creating subtitles...")
+    logging.info("Creating subtitles...")
     generate_all_subtitles(base_path)
 
-    # print("Exporting SRT files...")
+    logging.info("Exporting SRT files...")
     generate_srt_files(base_path)
 
 # === Main ===

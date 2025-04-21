@@ -3,7 +3,7 @@ import json
 import base64
 import requests
 from openai import OpenAI
-
+import logging
 # Initialize OpenAI client
 client = OpenAI(api_key="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")
 
@@ -29,7 +29,7 @@ class StoryGenerator:
             )
             return response.choices[0].message.content
         except Exception as e:
-            print("Error generating story:", e)
+            logging.info("Error generating story:", e)
             raise
 
 # --- IMAGE PROMPT GENERATOR ---
@@ -70,7 +70,7 @@ class ImagePromptGenerator:
                 raw_content = raw_content.lstrip("```").rstrip("```").strip()
             return json.loads(raw_content)
         except Exception as e:
-            print("Error generating image prompts:", e)
+            logging.info("Error generating image prompts:", e)
             raise
 
 # --- IMAGE GENERATOR ---
@@ -141,7 +141,7 @@ class StoryProcessor:
             img_path = os.path.join(story_dir, f"{i}.png")
             make_image(prompt, img_path)
 
-        print(f"✅ Story and images saved in {story_dir}")
+        logging.info(f"✅ Story and images saved in {story_dir}")
 
 # --- MAIN EXECUTION ---
 

@@ -6,6 +6,7 @@ import queue
 import os
 import time
 from create_video import create_video_from_images_with_audio
+import logging
 app = Flask(__name__)
 
 # Initialize once
@@ -18,19 +19,22 @@ request_queue = queue.Queue()
 
 def worker():
     while True:
+        time.sleep(1)  # Sleep to prevent busy waiting
+
+        if request_queue.empty():
+            continue
         item = request_queue.get()
-        if item is None:
-            break
+ 
         story_prompt, story_name = item
         try:
-            print(f"[Worker] Processing story: {story_name}")
+            logging.info(f"[Worker] Processing story: {story_name}")
             processor.run(story_prompt, story_name)
             run_pipeline(f"{story_name}")
-            print(f"[Worker] Completed: {story_name}")
+            logging.info(f"[Worker] Completed: {story_name}")
             create_video_from_images_with_audio( image_dir=f"{story_name}/upscaled_images/", audio_file=f"{story_name}/adam.mp3",output_file=f"{story_name}/story_video.mp4")
         except Exception as e:
-            print(f"[Worker] Error processing story {story_name}: {e}")
-        request_queue.task_done()
+            logging.info(f"[Worker] Error processing story {story_name}: {e}")
+        
 
 # Start the background worker thread
 worker_thread = threading.Thread(target=worker, daemon=True)
