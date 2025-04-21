@@ -74,10 +74,14 @@ def convert_text_to_speech(text, voice_id, output_path):
 def generate_audio_files(base_path, voice_name="adam"):
     dir_path = os.path.join(base_path)
     json_file = next((f for f in os.listdir(dir_path) if f.endswith(".json")), None)
+    print(f"------------------------------------------------------generate_audio_files:")
     if json_file:
         script = create_script(os.path.join(dir_path, json_file))
         audio_path = os.path.join(dir_path, f"{voice_name}.mp3")
+        print(f"Audio path: {audio_path}-------------------------------------")
         if not os.path.exists(audio_path):
+
+            print(f"Audio file does not exist, generating: {audio_path}")
             convert_text_to_speech(script, VOICE_IDS[voice_name], audio_path)
 
 # === Subtitle Processing ===
@@ -117,25 +121,71 @@ def extract_word_timings(audio_path):
 #         words[int(index)]["text"] = new_word.strip()
 #     return words
 
-def generate_subtitles(audio_path, save_path):
-    words = extract_word_timings(audio_path)
-    # words = optionally_correct_subtitles(words)
-    with open(save_path, 'w') as f:
-        json.dump(words, f)
-    return words
+# def generate_subtitles(audio_path, save_path):
+#     words = extract_word_timings(audio_path)
+#     # words = optionally_correct_subtitles(words)
+#     with open(save_path, 'w') as f:
+#         json.dump(words, f)
+#     return words
+
+# def generate_all_subtitles(base_path):
+    
+#     dir_path = os.path.join(base_path)
+#     audio_file = next((f for f in os.listdir(dir_path) if f.endswith(".mp3")), None)
+#     if audio_file:
+#         audio_path = os.path.join(dir_path, audio_file)
+#         subtitle_path = os.path.join(dir_path, "subtitles", "subtitles.json")
+#         if not os.path.exists(subtitle_path):
+#             generate_subtitles(audio_path, subtitle_path)
+
+#     del model
+#     torch.cuda.empty_cache()
+
+
+
+def get_words_and_time(model, speech):
+  audio = whisper.load_audio(speech)
+  result = whisper.transcribe(model, audio, language="en")
+  result_timestamped = json.loads(json.dumps(result, indent = 2, ensure_ascii = False))
+  words = []
+  for i in range(len(result_timestamped['segments'])):
+    words += result_timestamped['segments'][i]['words']
+  array = [{'text':i['text'],'start':i['start'], 'end':i['end'],'confidence':i['confidence']} for i in words]
+  return array
+
+def correct_subtitles(text_timestamped):
+  len_out = len(text_timestamped)
+  for i in range(len_out):
+    print(i, text_timestamped[i])
+  ip = input()
+  if ip.strip() == '':
+    return text_timestamped
+  else:
+    to_change = [(int(i.split(':')[0].strip()), i.split(':')[1].strip()) for i in ip.split(',')]
+    for ind, new_word in to_change:
+      print('ind', ind, 'new_word', new_word)
+      new_word_dict = {}
+      new_word_dict[new_word] = list(text_timestamped[ind].values())[0]
+      text_timestamped[ind] = new_word_dict
+    print('text_timestamped', text_timestamped)
+    return text_timestamped
+
+def make_text_timestamped(audio_path, save_path):
+  text_timestamped = get_words_and_time(WHISPER_MODEL, audio_path)
+  text_timestamped = correct_subtitles(text_timestamped)
+  json.dump(text_timestamped, open(save_path, 'w'))
+  return text_timestamped
 
 def generate_all_subtitles(base_path):
-    
-    dir_path = os.path.join(base_path)
-    audio_file = next((f for f in os.listdir(dir_path) if f.endswith(".mp3")), None)
-    if audio_file:
-        audio_path = os.path.join(dir_path, audio_file)
-        subtitle_path = os.path.join(dir_path, "subtitles", "subtitles.json")
-        if not os.path.exists(subtitle_path):
-            generate_subtitles(audio_path, subtitle_path)
+#   quiz_dirs = os.listdir(base_path)
+  dir_path = os.path.join(base_path)
+  audio_file = next((f for f in os.listdir(dir_path) if f.endswith(".mp3")), None)
+  if audio_file:
+    audio_path = os.path.join(dir_path, audio_file)
+    subtitles_path = os.path.join(base_path, "subtitles.json")
+    if not os.path.exists(subtitles_path):
+        text_timestamped = make_text_timestamped(audio_path, subtitles_path)
 
-    del model
-    torch.cuda.empty_cache()
 
 # === SRT Creation ===
 def format_timestamp(t):
