@@ -274,7 +274,7 @@ def run_pipeline(base_path):
     logging.info("Exporting SRT files...")
     generate_srt_files(base_path)
 
-     create_video_from_images_with_audio( image_dir=f"{base_path}/upscaled_images/", audio_file=f"{base_path}/adam.mp3",output_file=f"{base_path}/story_video.mp4")
+    create_video_from_images_with_audio( image_dir=f"{base_path}/upscaled_images/", audio_file=f"{base_path}/adam.mp3",output_file=f"{base_path}/story_video.mp4")
 
 # === Main ===
 if __name__ == "__main__":
