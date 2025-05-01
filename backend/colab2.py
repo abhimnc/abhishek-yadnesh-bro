@@ -124,13 +124,17 @@ def get_words_and_time(model, speech):
   array = [{'text':i['text'],'start':i['start'], 'end':i['end'],'confidence':i['confidence']} for i in words]
   return array
 
-def correct_subtitles(text_timestamped):
+def correct_subtitles(text_timestamped,interactive=False):
   len_out = len(text_timestamped)
   for i in range(len_out):
     logging.info(i, text_timestamped[i])
-  ip = input()
-  if ip.strip() == '':
+
+  if not interactive:
+    logging.info("Skipping manual subtitle correction in non-interactive mode.")
     return text_timestamped
+ 
+
+
   else:
     to_change = [(int(i.split(':')[0].strip()), i.split(':')[1].strip()) for i in ip.split(',')]
     for ind, new_word in to_change:
@@ -180,6 +184,11 @@ def generate_srt_files(base_path):
         if os.path.exists(subtitle_path) and not os.path.exists(srt_path):
             subtitles = json.load(open(subtitle_path))
             create_srt_from_subtitles(subtitles, srt_path)
+
+
+def correct_subtitles(text_timestamped):
+    # Skip interactive correction
+ 
 
 
 def create_video_from_images_with_audio(
