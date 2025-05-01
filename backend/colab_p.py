@@ -112,6 +112,37 @@ def extract_word_timings(audio_path):
 
 
 
+# def optionally_correct_subtitles(words):
+#     for idx, word in enumerate(words):
+#         print(idx, word)
+#     # inp = input("Enter corrections in format 'index:new_word' (comma separated), or press Enter to skip:\n")
+#     # if not inp.strip():
+#     #     return words
+#     for part in inp.split(','):
+#         index, new_word = part.split(':')
+#         words[int(index)]["text"] = new_word.strip()
+#     return words
+
+# def generate_subtitles(audio_path, save_path):
+#     words = extract_word_timings(audio_path)
+#     # words = optionally_correct_subtitles(words)
+#     with open(save_path, 'w') as f:
+#         json.dump(words, f)
+#     return words
+
+# def generate_all_subtitles(base_path):
+    
+#     dir_path = os.path.join(base_path)
+#     audio_file = next((f for f in os.listdir(dir_path) if f.endswith(".mp3")), None)
+#     if audio_file:
+#         audio_path = os.path.join(dir_path, audio_file)
+#         subtitle_path = os.path.join(dir_path, "subtitles", "subtitles.json")
+#         if not os.path.exists(subtitle_path):
+#             generate_subtitles(audio_path, subtitle_path)
+
+#     del model
+#     torch.cuda.empty_cache()
+
 
 
 def get_words_and_time(model, speech):
