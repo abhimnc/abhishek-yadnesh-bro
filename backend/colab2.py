@@ -186,7 +186,6 @@ def generate_srt_files(base_path):
             create_srt_from_subtitles(subtitles, srt_path)
 
 
- 
 
 
 def create_video_from_images_with_audio(
