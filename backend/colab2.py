@@ -186,8 +186,6 @@ def generate_srt_files(base_path):
             create_srt_from_subtitles(subtitles, srt_path)
 
 
-def correct_subtitles(text_timestamped):
-    # Skip interactive correction
  
 
 
