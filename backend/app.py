@@ -5,7 +5,6 @@ import threading
 import queue
 import os
 import time
-from create_video import create_video_from_images_with_audio
 import logging
 app = Flask(__name__)
 
