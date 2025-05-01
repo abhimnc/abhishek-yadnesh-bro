@@ -204,19 +204,20 @@ def create_video_from_images_with_audio(
     original_dir = os.getcwd()
     os.chdir(image_dir)
 
-    # FFmpeg command
     cmd = [
         "ffmpeg",
-        "-y",                           # Overwrite output file if it exists
-        "-framerate", str(framerate),  # Duration per image
-        "-i", "%d.png",                # Input image sequence
-        "-i", audio_file,              # Audio file
-        "-c:v", "libx264",             # H.264 codec
-        "-r", str(video_fps),          # Output framerate
-        "-pix_fmt", "yuv420p",         # Compatibility format
-        "-shortest",                   # Cut off at end of shortest input
+        "-y",
+        "-pattern_type", "glob",
+        "-framerate", str(framerate),
+        "-i", "*_out.png",
+        "-i", audio_file,
+        "-c:v", "libx264",
+        "-r", str(video_fps),
+        "-pix_fmt", "yuv420p",
+        "-shortest",
         output_file
     ]
+
 
     # Run ffmpeg
     try:
