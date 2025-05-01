@@ -4,6 +4,7 @@ import requests
 import whisper
 import torch
 import logging
+import subprocess
 # === Configs ===
 VOICE_IDS = {
     "quiz": "fMpuMtuBbLqzac6r00Am",
@@ -211,6 +212,54 @@ def generate_srt_files(base_path):
             subtitles = json.load(open(subtitle_path))
             create_srt_from_subtitles(subtitles, srt_path)
 
+
+def create_video_from_images_with_audio(
+    image_dir: str,
+    audio_file: str,
+    output_file: str = "output.mp4",
+    framerate: int = 1,
+    video_fps: int = 30
+):
+    """
+    Creates a video from a sequence of images and an audio file using ffmpeg.
+
+    Args:
+        image_dir (str): Path to the directory containing sequential images (e.g., 0.png, 1.png, ...).
+        audio_file (str): Path to the audio file to include in the video.
+        output_file (str): Output video filename. Defaults to 'output.mp4'.
+        framerate (int): How many seconds each image should be shown. Defaults to 1.
+        video_fps (int): Output video framerate. Defaults to 30.
+    """
+
+    # Store current working directory to restore later
+    original_dir = os.getcwd()
+    os.chdir(image_dir)
+
+    # FFmpeg command
+    cmd = [
+        "ffmpeg",
+        "-y",                           # Overwrite output file if it exists
+        "-framerate", str(framerate),  # Duration per image
+        "-i", "%d.png",                # Input image sequence
+        "-i", audio_file,              # Audio file
+        "-c:v", "libx264",             # H.264 codec
+        "-r", str(video_fps),          # Output framerate
+        "-pix_fmt", "yuv420p",         # Compatibility format
+        "-shortest",                   # Cut off at end of shortest input
+        output_file
+    ]
+
+    # Run ffmpeg
+    try:
+        subprocess.run(cmd, check=True)
+        logging.info(f"[✓] Video created successfully: {output_file}")
+    except subprocess.CalledProcessError as e:
+        logging.info("[✗] Error during video creation:", e)
+    finally:
+        os.chdir(original_dir)
+
+
+
 # === Runner ===
 def run_pipeline(base_path):
     logging.info("Upscaling images...")
@@ -224,6 +273,8 @@ def run_pipeline(base_path):
 
     logging.info("Exporting SRT files...")
     generate_srt_files(base_path)
+
+     create_video_from_images_with_audio( image_dir=f"{base_path}/upscaled_images/", audio_file=f"{base_path}/adam.mp3",output_file=f"{base_path}/story_video.mp4")
 
 # === Main ===
 if __name__ == "__main__":
