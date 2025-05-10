@@ -28,63 +28,72 @@ def upscale_image(image_path, output_dir):
         logging.info(f'Upscaling failed for {image_path}: {e}')
 
 def process_images(base_path): 
-    quiz_dir_path = os.path.join(base_path)
-    logging.info(quiz_dir_path)
-    upscaled_dir = os.path.join(quiz_dir_path, "upscaled_images")
-    os.makedirs(upscaled_dir, exist_ok=True)
+    try:
+        quiz_dir_path = os.path.join(base_path)
+        logging.info(quiz_dir_path)
+        upscaled_dir = os.path.join(quiz_dir_path, "upscaled_images")
+        os.makedirs(upscaled_dir, exist_ok=True)
 
-    images = [f for f in os.listdir(quiz_dir_path) if f.endswith(".png")]
-    for image in images:
-        image_path = os.path.join(quiz_dir_path, image)
-        logging.info(f'Processing image: {image_path}')
-        upscale_image(image_path, upscaled_dir)
+        images = [f for f in os.listdir(quiz_dir_path) if f.endswith(".png")]
+        for image in images:
+            image_path = os.path.join(quiz_dir_path, image)
+            logging.info(f'Processing image: {image_path}')
+            upscale_image(image_path, upscaled_dir)
+    except Exception as e:
+        logging.info(f'Error processing images: {e}')
 
 # === Audio Processing ===
 def create_script(json_path):
-    data = json.load(open(json_path))
-    lines = data.get("lines", [])  # Adjust this key based on actual JSON
-    return "\n".join(f'"{line[0]}"' for line in lines if isinstance(line, list) and line)
-
-
-    return "\n".join(f'"{line[0]}"' for line in data[:-1])
+    try:
+        data = json.load(open(json_path))
+        lines = data.get("lines", [])  # Adjust this key based on actual JSON
+        return "\n".join(f'"{line[0]}"' for line in lines if isinstance(line, list) and line)
+    except Exception as e:
+        logging.info(f'Error creating script: {e}')
 
 def convert_text_to_speech(text, voice_id, output_path):
-    url = f'https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?optimize_streaming_latency=0'
-    headers = {
-        'accept': 'audio/mpeg',
-        'xi-api-key': API_KEY_11_LABS,
-        'Content-Type': 'application/json'
-    }
-    data = {
-        "text": text,
-        "model_id": "eleven_monolingual_v1",
-        "voice_settings": {
-            "stability": 0,
-            "similarity_boost": 0,
-            "style": 0,
-            "use_speaker_boost": True
+    try:
+        url = f'https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?optimize_streaming_latency=0'
+        headers = {
+            'accept': 'audio/mpeg',
+            'xi-api-key': API_KEY_11_LABS,
+            'Content-Type': 'application/json'
         }
-    }
-    response = requests.post(url, headers=headers, json=data)
-    if response.status_code == 200:
-        with open(output_path, 'wb') as f:
-            f.write(response.content)
-        logging.info(f'Audio saved: {output_path}')
-    else:
-        logging.info(f'Failed to generate audio: {response.status_code} - {response.text}')
+        data = {
+            "text": text,
+            "model_id": "eleven_monolingual_v1",
+            "voice_settings": {
+                "stability": 0,
+                "similarity_boost": 0,
+                "style": 0,
+                "use_speaker_boost": True
+            }
+        }
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 200:
+            with open(output_path, 'wb') as f:
+                f.write(response.content)
+            logging.info(f'Audio saved: {output_path}')
+        else:
+            logging.info(f'Failed to generate audio: {response.status_code} - {response.text}')
+    except Exception as e:
+        logging.info(f'Error converting text to speech: {e}')
 
 def generate_audio_files(base_path, voice_name="adam"):
-    dir_path = os.path.join(base_path)
-    json_file = next((f for f in os.listdir(dir_path) if f.endswith(".json")), None)
-    logging.info(f"------------------------------------------------------generate_audio_files:")
-    if json_file:
-        script = create_script(os.path.join(dir_path, json_file))
-        audio_path = os.path.join(dir_path, f"{voice_name}.mp3")
-        logging.info(f"Audio path: {audio_path}-------------------------------------")
-        if not os.path.exists(audio_path):
+    try:
+        dir_path = os.path.join(base_path)
+        json_file = next((f for f in os.listdir(dir_path) if f.endswith(".json")), None)
+        logging.info(f"------------------------------------------------------generate_audio_files:")
+        if json_file:
+            script = create_script(os.path.join(dir_path, json_file))
+            audio_path = os.path.join(dir_path, f"{voice_name}.mp3")
+            logging.info(f"Audio path: {audio_path}-------------------------------------")
+            if not os.path.exists(audio_path):
 
-            logging.info(f"Audio file does not exist, generating: {audio_path}")
-            convert_text_to_speech(script, VOICE_IDS[voice_name], audio_path)
+                logging.info(f"Audio file does not exist, generating: {audio_path}")
+                convert_text_to_speech(script, VOICE_IDS[voice_name], audio_path)
+    except Exception as e:
+        logging.info(f'Error generating audio files: {e}')
 
 # === Subtitle Processing ===
 def extract_word_timings(audio_path):
@@ -146,20 +155,27 @@ def correct_subtitles(text_timestamped,interactive=False):
     return text_timestamped
 
 def make_text_timestamped(audio_path, save_path):
-  text_timestamped = get_words_and_time(WHISPER_MODEL, audio_path)
-  text_timestamped = correct_subtitles(text_timestamped)
-  json.dump(text_timestamped, open(save_path, 'w'))
-  return text_timestamped
+  try:
+    text_timestamped = get_words_and_time(WHISPER_MODEL, audio_path)
+    text_timestamped = correct_subtitles(text_timestamped)
+    json.dump(text_timestamped, open(save_path, 'w'))
+    return text_timestamped
+  except Exception as e:
+    logging.info(f'Error making text timestamped: {e}')
 
 def generate_all_subtitles(base_path):
-#   quiz_dirs = os.listdir(base_path)
-  dir_path = os.path.join(base_path)
-  audio_file = next((f for f in os.listdir(dir_path) if f.endswith(".mp3")), None)
-  if audio_file:
-    audio_path = os.path.join(dir_path, audio_file)
-    subtitles_path = os.path.join(base_path, "subtitles.json")
-    if not os.path.exists(subtitles_path):
-        text_timestamped = make_text_timestamped(audio_path, subtitles_path)
+  try:
+    #   quiz_dirs = os.listdir(base_path)
+    dir_path = os.path.join(base_path)
+    audio_file = next((f for f in os.listdir(dir_path) if f.endswith(".mp3")), None)
+    if audio_file:
+        audio_path = os.path.join(dir_path, audio_file)
+        subtitles_path = os.path.join(base_path, "subtitles.json")
+        if not os.path.exists(subtitles_path):
+            text_timestamped = make_text_timestamped(audio_path, subtitles_path)
+  except Exception as e:
+    logging.info(f'Error generating all subtitles: {e}')
+
 
 
 # === SRT Creation ===
@@ -169,21 +185,27 @@ def format_timestamp(t):
     return f"00:00:{sec:02d},{msec:03d}"
 
 def create_srt_from_subtitles(subtitles, output_path):
-    with open(output_path, 'w') as f:
-        for idx, sub in enumerate(subtitles, 1):
-            f.write(f"{idx}\n")
-            f.write(f"{format_timestamp(sub['start'])} --> {format_timestamp(sub['end'])}\n")
-            f.write(f"{sub['text']}\n\n")
+    try:
+        with open(output_path, 'w') as f:
+            for idx, sub in enumerate(subtitles, 1):
+                f.write(f"{idx}\n")
+                f.write(f"{format_timestamp(sub['start'])} --> {format_timestamp(sub['end'])}\n")
+                f.write(f"{sub['text']}\n\n")
+    except Exception as e:
+        logging.info(f'Error creating srt from subtitles: {e}')
 
 def generate_srt_files(base_path):
-    for quiz_dir in os.listdir(base_path):
-        dir_path = os.path.join(base_path, quiz_dir)
-        #os.makedirs(dir_path, exist_ok=True)
-        subtitle_path = os.path.join(dir_path, "subtitles.json")
+    try:
+        for quiz_dir in os.listdir(base_path):
+            dir_path = os.path.join(base_path, quiz_dir)
+            #os.makedirs(dir_path, exist_ok=True)
+            subtitle_path = os.path.join(dir_path, "subtitles.json")
         srt_path = os.path.join(dir_path, "subtitles.srt")
         if os.path.exists(subtitle_path) and not os.path.exists(srt_path):
             subtitles = json.load(open(subtitle_path))
             create_srt_from_subtitles(subtitles, srt_path)
+    except Exception as e:
+        logging.info(f'Error generating srt files: {e}')
 
 
 
@@ -205,28 +227,25 @@ def create_video_from_images_with_audio(
         framerate (int): How many seconds each image should be shown. Defaults to 1.
         video_fps (int): Output video framerate. Defaults to 30.
     """
-
-    # Store current working directory to restore later
-    original_dir = os.getcwd()
-    os.chdir(image_dir)
-
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-pattern_type", "glob",
-        "-framerate", str(framerate),
-        "-i", "*_out.png",
-        "-i", audio_file,
-        "-c:v", "libx264",
-        "-r", str(video_fps),
-        "-pix_fmt", "yuv420p",
-        "-shortest",
-        output_file
-    ]
-
-
-    # Run ffmpeg
     try:
+        # Store current working directory to restore later
+        original_dir = os.getcwd()
+        os.chdir(image_dir)
+
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-pattern_type", "glob",
+            "-framerate", str(framerate),
+            "-i", "*_out.png",
+            "-i", audio_file,
+            "-c:v", "libx264",
+            "-r", str(video_fps),
+            "-pix_fmt", "yuv420p",
+            "-shortest",
+            output_file
+        ]
+        # Run ffmpeg
         subprocess.run(cmd, check=True)
         logging.info(f"[✓] Video created successfully: {output_file}")
     except subprocess.CalledProcessError as e:
@@ -250,7 +269,12 @@ def run_pipeline(base_path):
     logging.info("Exporting SRT files...")
     generate_srt_files(base_path)
 
-    create_video_from_images_with_audio( image_dir=f"{base_path}/upscaled_images/", audio_file=f"{base_path}/adam.mp3",output_file=f"{base_path}/story_video.mp4")
+    logging.info("Creating video...")
+    create_video_from_images_with_audio(
+        image_dir=f"{base_path}/upscaled_images/", 
+        audio_file=f"{base_path}/adam.mp3",
+        output_file=f"{base_path}/story_video.mp4"
+    )
 
 # === Main ===
 if __name__ == "__main__":
