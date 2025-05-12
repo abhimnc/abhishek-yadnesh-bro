@@ -1,0 +1,22 @@
+# FastAPI and related
+fastapi
+uvicorn[standard]
+
+# Database & ORM
+sqlmodel
+psycopg2-binary
+alembic
+
+# Auth & Security
+python-jose[cryptography]
+passlib[bcrypt]
+authlib
+
+# Celery
+celery
+redis # Example broker/backend, adjust if using RabbitMQ etc.
+
+# Utilities
+python-dotenv
+
+# Add other dependencies as needed 
