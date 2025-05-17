@@ -5,278 +5,451 @@ import whisper
 import torch
 import logging
 import subprocess
+import dotenv
+import re # Added for normalize_word
+
+dotenv.load_dotenv()
+
+# Import logger from app if possible, otherwise set up a fallback
+try:
+    from .app import logger
+except ImportError:
+    # Fallback if run directly (not through app.py)
+    logger = logging.getLogger("story_generator")
+    if not logger.handlers:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[logging.StreamHandler()]
+        )
+
 # === Configs ===
 VOICE_IDS = {
-    "quiz": "fMpuMtuBbLqzac6r00Am",
-    "bruce": "OfaedTFdEgJsFwZK1BiV",
-    "wayne": "VYKg4tM6Oy6LclM5LvKO",
-    "myra": "8qBGIaLTJL2SAnhbJlK3",
-    "adam": "pNInz6obpgDQGcFmaJgB"
+    "quiz": "aura-asteria-en",
+    "bruce": "aura-hades-en",
+    "wayne": "aura-titan-en",
+    "myra": "aura-athena-en",
+    "adam": "aura-zeus-en"
 }
-API_KEY_11_LABS = "008647ae5d21e87656507bb6ef123b34"
+API_KEY_DEEPGRAM = os.getenv("DEEPGRAM_API_KEY")
 
 device1 = "cuda" if torch.cuda.is_available() else "cpu"
 WHISPER_MODEL = whisper.load_model("large", device=device1)
 
-# === Image Processing ===
-def upscale_image(image_path, output_dir):
-    try:
-        command = f'python ../Real-ESRGAN/inference_realesrgan.py -n RealESRGAN_x4plus -i "{image_path}" -o "{output_dir}"'
-        os.system(command)
-        logging.info(f'Upscaled: {image_path} -> {output_dir}')
-    except Exception as e:
-        logging.info(f'Upscaling failed for {image_path}: {e}')
-
-def process_images(base_path): 
-    try:
-        quiz_dir_path = os.path.join(base_path)
-        logging.info(quiz_dir_path)
-        upscaled_dir = os.path.join(quiz_dir_path, "upscaled_images")
-        os.makedirs(upscaled_dir, exist_ok=True)
-
-        images = [f for f in os.listdir(quiz_dir_path) if f.endswith(".png")]
-        for image in images:
-            image_path = os.path.join(quiz_dir_path, image)
-            logging.info(f'Processing image: {image_path}')
-            upscale_image(image_path, upscaled_dir)
-    except Exception as e:
-        logging.info(f'Error processing images: {e}')
-
 # === Audio Processing ===
 def create_script(json_path):
     try:
+        logger.info(f"Create_script: loading json file path: {json_path}")
         data = json.load(open(json_path))
-        lines = data.get("lines", [])  # Adjust this key based on actual JSON
-        return "\n".join(f'"{line[0]}"' for line in lines if isinstance(line, list) and line)
+        story_lines = [ele.get("line") for ele in data.get("image_prompts",[])]
+        story = " ".join(story_lines)
+        return story
     except Exception as e:
-        logging.info(f'Error creating script: {e}')
+        logger.info(f'Error creating script: {e}')
 
 def convert_text_to_speech(text, voice_id, output_path):
     try:
-        url = f'https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?optimize_streaming_latency=0'
-        headers = {
-            'accept': 'audio/mpeg',
-            'xi-api-key': API_KEY_11_LABS,
-            'Content-Type': 'application/json'
-        }
-        data = {
-            "text": text,
-            "model_id": "eleven_monolingual_v1",
-            "voice_settings": {
-                "stability": 0,
-                "similarity_boost": 0,
-                "style": 0,
-                "use_speaker_boost": True
+        logger.info(f"Convert_text_to_speech: text: {text}")
+        response = requests.post("https://api.deepgram.com/v1/speak",
+            headers={
+                "Authorization": f"Token {API_KEY_DEEPGRAM}"
+            },
+            json={
+                "text": text
             }
-        }
-        response = requests.post(url, headers=headers, json=data)
+        )
         if response.status_code == 200:
             with open(output_path, 'wb') as f:
                 f.write(response.content)
-            logging.info(f'Audio saved: {output_path}')
+            logger.info(f'Audio saved: {output_path}')
         else:
-            logging.info(f'Failed to generate audio: {response.status_code} - {response.text}')
+            logger.info(f'Failed to generate audio: {response.status_code} - {response.text}')
     except Exception as e:
-        logging.info(f'Error converting text to speech: {e}')
+        logger.info(f'Error converting text to speech: {e}')
 
 def generate_audio_files(base_path, voice_name="adam"):
     try:
+        logger.info(f"Generate_audio_files:")
         dir_path = os.path.join(base_path)
-        json_file = next((f for f in os.listdir(dir_path) if f.endswith(".json")), None)
-        logging.info(f"------------------------------------------------------generate_audio_files:")
-        if json_file:
-            script = create_script(os.path.join(dir_path, json_file))
+        json_files = [f for f in os.listdir(dir_path) if f.endswith(".json") and f != "subtitles.json"]
+        story_json_file = json_files[0] if json_files else None
+        
+        if story_json_file:
+            script = create_script(os.path.join(dir_path, story_json_file))
             audio_path = os.path.join(dir_path, f"{voice_name}.mp3")
-            logging.info(f"Audio path: {audio_path}-------------------------------------")
+            logger.info(f"Audio path: {audio_path}")
             if not os.path.exists(audio_path):
-
-                logging.info(f"Audio file does not exist, generating: {audio_path}")
+                logger.info(f"Audio file does not exist, generating: {audio_path}")
                 convert_text_to_speech(script, VOICE_IDS[voice_name], audio_path)
+            else:
+                logger.info(f"Audio file already exists: {audio_path}")
+        else:
+            logger.warning("No story JSON file found (excluding subtitles.json) to generate script for audio.")
     except Exception as e:
-        logging.info(f'Error generating audio files: {e}')
+        logger.info(f'Error generating audio files: {e}')
 
 # === Subtitle Processing ===
 def extract_word_timings(audio_path):
-    audio = whisper.load_audio(audio_path)
-    result = whisper.transcribe(WHISPER_MODEL, audio, language="en", word_timestamps=True)
-    
-    words = []
-    for segment in result.get("segments", []):
-        segment_words = segment.get("words", [])
-        logging.info([w.keys() for w in segment_words])
-
-        for w in segment_words:
-            if all(k in w for k in ("word", "start", "end")):
-                words.append({
-                    "text": w["word"],                     # renamed key
-                    "start": float(w["start"]),
-                    "end": float(w["end"]),
-                    "confidence": float(w.get("probability", 1.0))  # mapped + fallback
-                })
-            else:
-                logging.info(f"Skipping malformed word entry: {w}")
-    
-    return words
-
-
-
-
-
+    try:
+        url = 'https://api.deepgram.com/v1/listen'
+        headers = {
+            'Authorization': f'Token {API_KEY_DEEPGRAM}',
+            'Content-Type': 'audio/mp3'
+        }
+        
+        params = {
+            'punctuate': 'true', 'diarize': 'false', 'utterances': 'false',
+            'model': 'nova', 'language': 'en'
+        }
+        
+        with open(audio_path, 'rb') as audio_file:
+            response = requests.post(url, headers=headers, params=params, data=audio_file)
+        
+        if response.status_code != 200:
+            logger.info(f"Error from Deepgram API: {response.status_code} - {response.text}")
+            return []
+        
+        result = response.json()
+        words = []
+        if 'results' in result and 'channels' in result['results'] and len(result['results']['channels']) > 0:
+            channel = result['results']['channels'][0]
+            if 'alternatives' in channel and len(channel['alternatives']) > 0:
+                alternative = channel['alternatives'][0]
+                if 'words' in alternative:
+                    for word_info in alternative['words']:
+                        words.append({
+                            'text': word_info['word'], 'start': float(word_info['start']),
+                            'end': float(word_info['end']), 'confidence': float(word_info.get('confidence', 1.0))
+                        })
+        return words
+    except Exception as e:
+        logger.info(f"Error extracting word timings with Deepgram: {e}")
+        return []
 
 def get_words_and_time(model, speech):
-  audio = whisper.load_audio(speech)
-  result = whisper.transcribe(model, audio, language="en")
-  result_timestamped = json.loads(json.dumps(result, indent = 2, ensure_ascii = False))
-  words = []
-  for i in range(len(result_timestamped['segments'])):
-    words += result_timestamped['segments'][i]['words']
-  array = [{'text':i['text'],'start':i['start'], 'end':i['end'],'confidence':i['confidence']} for i in words]
-  return array
+    return extract_word_timings(speech)
 
 def correct_subtitles(text_timestamped,interactive=False):
   len_out = len(text_timestamped)
   for i in range(len_out):
-    logging.info(i, text_timestamped[i])
+    logger.info(f"{i}, {text_timestamped[i]}") # Python 3.6+ f-string
 
   if not interactive:
-    logging.info("Skipping manual subtitle correction in non-interactive mode.")
+    logger.info("Skipping manual subtitle correction in non-interactive mode.")
     return text_timestamped
- 
-
-
-  else:
-    to_change = [(int(i.split(':')[0].strip()), i.split(':')[1].strip()) for i in ip.split(',')]
+  else: # pragma: no cover
+    # This part seems to rely on 'ip' which is not defined. Assuming it's for interactive input.
+    # For non-interactive use, this branch isn't hit.
+    ip_input = input("Enter comma-separated corrections (index:new_word): ")
+    to_change = [(int(i.split(':')[0].strip()), i.split(':')[1].strip()) for i in ip_input.split(',')]
     for ind, new_word in to_change:
-      logging.info('ind', ind, 'new_word', new_word)
-      new_word_dict = {}
-      new_word_dict[new_word] = list(text_timestamped[ind].values())[0]
-      text_timestamped[ind] = new_word_dict
-    logging.info('text_timestamped', text_timestamped)
+      logger.info(f'ind: {ind}, new_word: {new_word}')
+      # Original code was a bit unclear here. Assuming structure is {'word': [start, end]}
+      # This part needs to be robust to the actual structure of text_timestamped elements
+      if ind < len(text_timestamped) and isinstance(text_timestamped[ind], dict) and len(text_timestamped[ind].values()) == 1:
+          original_timing = list(text_timestamped[ind].values())[0]
+          text_timestamped[ind] = {new_word: original_timing} 
+      else:
+          logger.warning(f"Could not correct subtitle at index {ind}, data format issue or index out of bounds.")
+    logger.info(f'text_timestamped after correction: {text_timestamped}')
     return text_timestamped
 
 def make_text_timestamped(audio_path, save_path):
   try:
     text_timestamped = get_words_and_time(WHISPER_MODEL, audio_path)
-    text_timestamped = correct_subtitles(text_timestamped)
+    # text_timestamped = correct_subtitles(text_timestamped) # Assuming non-interactive for now
     json.dump(text_timestamped, open(save_path, 'w'))
     return text_timestamped
   except Exception as e:
-    logging.info(f'Error making text timestamped: {e}')
+    logger.info(f'Error making text timestamped: {e}')
 
 def generate_all_subtitles(base_path):
   try:
-    #   quiz_dirs = os.listdir(base_path)
     dir_path = os.path.join(base_path)
     audio_file = next((f for f in os.listdir(dir_path) if f.endswith(".mp3")), None)
     if audio_file:
         audio_path = os.path.join(dir_path, audio_file)
         subtitles_path = os.path.join(base_path, "subtitles.json")
         if not os.path.exists(subtitles_path):
-            text_timestamped = make_text_timestamped(audio_path, subtitles_path)
+            logger.info(f"Generating subtitles for {audio_path}")
+            make_text_timestamped(audio_path, subtitles_path)
+        else:
+            logger.info(f"Subtitles file already exists: {subtitles_path}")
+    else:
+        logger.warning(f"No MP3 file found in {dir_path} to generate subtitles.")
   except Exception as e:
-    logging.info(f'Error generating all subtitles: {e}')
-
-
+    logger.info(f'Error generating all subtitles: {e}')
 
 # === SRT Creation ===
 def format_timestamp(t):
-    sec = int(t)
-    msec = int((t - sec) * 1000)
-    return f"00:00:{sec:02d},{msec:03d}"
+    hours = int(t / 3600)
+    minutes = int((t % 3600) / 60)
+    seconds = int(t % 60)
+    milliseconds = int((t - int(t)) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
 def create_srt_from_subtitles(subtitles, output_path):
     try:
+        logger.info(f"Creating srt from subtitles: {output_path}")
         with open(output_path, 'w') as f:
             for idx, sub in enumerate(subtitles, 1):
                 f.write(f"{idx}\n")
                 f.write(f"{format_timestamp(sub['start'])} --> {format_timestamp(sub['end'])}\n")
                 f.write(f"{sub['text']}\n\n")
     except Exception as e:
-        logging.info(f'Error creating srt from subtitles: {e}')
+        logger.info(f'Error creating srt from subtitles: {e}')
 
 def generate_srt_files(base_path):
     try:
-        for quiz_dir in os.listdir(base_path):
-            dir_path = os.path.join(base_path, quiz_dir)
-            #os.makedirs(dir_path, exist_ok=True)
-            subtitle_path = os.path.join(dir_path, "subtitles.json")
-        srt_path = os.path.join(dir_path, "subtitles.srt")
+        logger.info(f"Generating srt files for {base_path}")
+        subtitle_path = os.path.join(base_path, "subtitles.json")
+        srt_path = os.path.join(base_path, "subtitles.srt")
         if os.path.exists(subtitle_path) and not os.path.exists(srt_path):
+            logger.info(f"Creating srt from subtitles: {srt_path}")
             subtitles = json.load(open(subtitle_path))
             create_srt_from_subtitles(subtitles, srt_path)
+        elif not os.path.exists(subtitle_path):
+            logger.warning(f"Subtitles JSON not found at {subtitle_path}, cannot generate SRT.")
+        elif os.path.exists(srt_path):
+            logger.info(f"SRT file already exists: {srt_path}")
     except Exception as e:
-        logging.info(f'Error generating srt files: {e}')
+        logger.info(f'Error generating srt files: {e}')
+
+# === Dynamic Image Duration Calculation ===
+def normalize_word(word):
+    # Lowercase and remove punctuation (keeps apostrophes if part of word logic)
+    return re.sub(r"[^\w\s']", '', word).lower().strip()
+
+def calculate_image_durations_from_story(story_json_path, subtitles_json_path):
+    logger.info(f"Calculating image durations from story: {story_json_path} and subtitles: {subtitles_json_path}")
+    try:
+        with open(story_json_path, 'r', encoding='utf-8') as f: # Added encoding
+            story_data = json.load(f)
+        with open(subtitles_json_path, 'r', encoding='utf-8') as f: # Added encoding
+            subtitles_data = json.load(f)
+    except FileNotFoundError as e:
+        logger.error(f"Error loading JSON files for duration calculation: {e}")
+        return []
+    except json.JSONDecodeError as e:
+        logger.error(f"Error decoding JSON for duration calculation: {e}")
+        return []
+
+    image_specs = []
+    subtitle_word_idx = 0
+
+    if not subtitles_data:
+        logger.error("Subtitles data is empty. Cannot calculate durations.")
+        return []
+
+    image_prompts = story_data.get("image_prompts", [])
+    if not image_prompts:
+        logger.warning("No image_prompts found in story JSON.")
+        return []
+
+    for i, prompt_entry in enumerate(image_prompts):
+        line_text = prompt_entry.get("line")
+        if not line_text:
+            logger.warning(f"Image prompt {i} has no line text. Skipping.")
+            continue
+
+        line_words_original = line_text.split()
+        normalized_line_words = [normalize_word(w) for w in line_words_original if normalize_word(w)]
+
+        if not normalized_line_words:
+            logger.warning(f"Line for image {i} is empty after normalization: '{line_text}'. Skipping.")
+            continue
+        
+        num_words_in_current_line = len(normalized_line_words)
+        
+        current_line_matched_subtitle_words = []
+        initial_subtitle_word_idx_for_this_line = subtitle_word_idx # Store for potential reset if line fails
+
+        for k, target_norm_word in enumerate(normalized_line_words):
+            if subtitle_word_idx >= len(subtitles_data):
+                logger.warning(f"Ran out of subtitle words while matching line for image {i} (word '{target_norm_word}'): '{line_text}'")
+                break 
+            
+            current_subtitle_norm_word = normalize_word(subtitles_data[subtitle_word_idx]['text'])
+            
+            if target_norm_word == current_subtitle_norm_word:
+                current_line_matched_subtitle_words.append(subtitles_data[subtitle_word_idx])
+                subtitle_word_idx += 1 
+            else:
+                logger.warning(f"Word mismatch for image {i}, line '{line_text}'. Expected '{target_norm_word}', got '{current_subtitle_norm_word}' from subtitles. Line will be skipped.")
+                # Reset subtitle_word_idx to where it started for this line, so next line attempt isn't skewed
+                subtitle_word_idx = initial_subtitle_word_idx_for_this_line 
+                current_line_matched_subtitle_words = [] # Invalidate matches for this line
+                break # Stop processing this line
+
+        if len(current_line_matched_subtitle_words) == num_words_in_current_line:
+            line_start_time = current_line_matched_subtitle_words[0]['start']
+            line_end_time = current_line_matched_subtitle_words[-1]['end']
+            duration = line_end_time - line_start_time
+            
+            if duration <= 0:
+                logger.warning(f"Calculated non-positive duration ({duration:.3f}s) for image {i} (line: '{line_text}'). Start: {line_start_time}, End: {line_end_time}. Using 0.1s instead.")
+                duration = 0.1 
+
+            image_specs.append({
+                'filename': f"{i}.png", 
+                'duration': duration
+            })
+        elif normalized_line_words: # Only log error if there were words to match
+             logger.error(f"Failed to match all words for image {i}, line '{line_text}'. Matched {len(current_line_matched_subtitle_words)}/{num_words_in_current_line}. Skipping duration for this image.")
+             # subtitle_word_idx was already reset if mismatch occurred, or it correctly points to the start of the next segment if loop completed partially.
+
+    if not image_specs:
+        logger.error("No image durations could be calculated successfully.")
+    return image_specs
 
 
-
-
+# === Video Creation ===
 def create_video_from_images_with_audio(
     image_dir: str,
-    audio_file: str,
-    output_file: str = "output.mp4",
-    framerate: int = 1,
+    audio_file_abs: str,
+    srt_file_abs: str,
+    output_file_abs: str,
+    image_specs: list, # List of {'filename': '0.png', 'duration': 3.5}
+    ffmpeg_executable_path: str = "ffmpeg",
     video_fps: int = 30
 ):
-    """
-    Creates a video from a sequence of images and an audio file using ffmpeg.
+    logger.info(f"Creating video with dynamic image durations. Number of images: {len(image_specs)}")
+    if not image_specs:
+        logger.error("No image specifications provided. Cannot create video.")
+        return
 
-    Args:
-        image_dir (str): Path to the directory containing sequential images (e.g., 0.png, 1.png, ...).
-        audio_file (str): Path to the audio file to include in the video.
-        output_file (str): Output video filename. Defaults to 'output.mp4'.
-        framerate (int): How many seconds each image should be shown. Defaults to 1.
-        video_fps (int): Output video framerate. Defaults to 30.
-    """
+    original_dir = os.getcwd()
+    concat_file_path = None # Initialize
+
     try:
-        # Store current working directory to restore later
-        original_dir = os.getcwd()
-        os.chdir(image_dir)
+        audio_filename_relative = os.path.basename(audio_file_abs)
+        srt_filename_relative = os.path.basename(srt_file_abs)
+        output_filename_relative = os.path.basename(output_file_abs)
+
+        os.chdir(image_dir) # Change to image directory
+
+        # Create concat file
+        concat_filename = "concat_list.txt"
+        concat_file_path = os.path.join(image_dir, concat_filename) # Absolute path for cleanup
+        
+        with open(concat_filename, 'w') as f:
+            for spec in image_specs:
+                # Ensure filenames in concat file are relative to image_dir (which they are, e.g., "0.png")
+                f.write(f"file '{spec['filename']}'\n")
+                f.write(f"duration {spec['duration']:.3f}\n")
+        
+        logger.info(f"Generated ffmpeg concat file: {concat_filename} with {len(image_specs)} entries.")
 
         cmd = [
-            "ffmpeg",
+            ffmpeg_executable_path,
             "-y",
-            "-pattern_type", "glob",
-            "-framerate", str(framerate),
-            "-i", "*_out.png",
-            "-i", audio_file,
+            "-f", "concat",
+            "-safe", "0", # Needed if paths in concat file are relative outside current dir, or absolute. Here, they are relative to image_dir.
+            "-i", concat_filename, # Input from concat file
+            "-i", audio_filename_relative,
+            "-vf", f"subtitles={srt_filename_relative}",
             "-c:v", "libx264",
+            "-c:a", "aac",
+            "-strict", "experimental",
             "-r", str(video_fps),
             "-pix_fmt", "yuv420p",
             "-shortest",
-            output_file
+            output_filename_relative
         ]
-        # Run ffmpeg
-        subprocess.run(cmd, check=True)
-        logging.info(f"[✓] Video created successfully: {output_file}")
+        
+        logger.info(f"Executing ffmpeg command: {' '.join(cmd)}")
+        subprocess.run(cmd, check=True, shell=False)
+        logger.info(f"[✓] Video created successfully: {output_file_abs}")
+
     except subprocess.CalledProcessError as e:
-        logging.info("[✗] Error during video creation:", e)
+        logger.error(f"[✗] Error during video creation: {e}")
+        logger.error(f"Command was: {' '.join(e.cmd)}" if hasattr(e, 'cmd') else "Command details not available.")
+        if e.stdout: logger.error(f"ffmpeg stdout: {e.stdout.decode(errors='ignore')}")
+        if e.stderr: logger.error(f"ffmpeg stderr: {e.stderr.decode(errors='ignore')}")
+    except FileNotFoundError: # For ffmpeg executable
+        logger.error(f"[✗] Error: The ffmpeg executable ('{ffmpeg_executable_path}') was not found.")
+    except Exception as e:
+        logger.error(f"[✗] An unexpected error occurred during video creation: {e}")
     finally:
+        if concat_file_path and os.path.exists(concat_file_path):
+            try:
+                os.remove(concat_file_path)
+                logger.info(f"Cleaned up temporary concat file: {concat_file_path}")
+            except Exception as e_clean:
+                logger.error(f"Error cleaning up concat file {concat_file_path}: {e_clean}")
         os.chdir(original_dir)
 
 
-
 # === Runner ===
-def run_pipeline(base_path):
-    logging.info("Upscaling images...")
-    process_images(base_path)
-
-    logging.info("Generating audio...")
+def run_pipeline(base_path, ffmpeg_executable_path: str = "ffmpeg"):
+    logger.info(f"Starting pipeline for base_path: {base_path}")
+    
+    logger.info("Generating audio...")
     generate_audio_files(base_path)
 
-    logging.info("Creating subtitles...")
-    generate_all_subtitles(base_path)
+    logger.info("Creating subtitles JSON...")
+    generate_all_subtitles(base_path) # This generates subtitles.json
 
-    logging.info("Exporting SRT files...")
-    generate_srt_files(base_path)
+    logger.info("Exporting SRT files...")
+    generate_srt_files(base_path) # This generates subtitles.srt
 
-    logging.info("Creating video...")
+    # Calculate dynamic image durations
+    json_files = [f for f in os.listdir(base_path) if f.endswith(".json")]
+    story_json_filename = None
+    for fname in json_files:
+        if fname.lower() != "subtitles.json": # case-insensitive check
+            story_json_filename = fname
+            break
+    
+    if not story_json_filename:
+        logger.error(f"Story JSON file (other than subtitles.json) not found in {base_path}. Cannot proceed with dynamic durations.")
+        return
+
+    story_json_path = os.path.join(base_path, story_json_filename)
+    subtitles_json_path = os.path.join(base_path, "subtitles.json")
+
+    if not os.path.exists(story_json_path):
+        logger.error(f"Identified story JSON ({story_json_path}) does not exist.")
+        return
+    if not os.path.exists(subtitles_json_path):
+        logger.error(f"Subtitles JSON ({subtitles_json_path}) does not exist. Cannot calculate dynamic durations.")
+        return
+
+    image_specs = calculate_image_durations_from_story(story_json_path, subtitles_json_path)
+
+    if not image_specs:
+        logger.error("Failed to calculate image durations. Video creation with dynamic durations aborted.")
+        return
+
+    logger.info("Creating video with dynamic durations...")
+    audio_file_abs = os.path.join(base_path, "adam.mp3") # Assuming default voice/filename
+    srt_file_abs = os.path.join(base_path, "subtitles.srt")
+    output_video_abs = os.path.join(base_path, "story_video_dynamic.mp4") # New output name
+
+    if not os.path.exists(audio_file_abs):
+        logger.error(f"Audio file {audio_file_abs} not found. Cannot create video.")
+        return
+    if not os.path.exists(srt_file_abs) and image_specs: # SRT is needed if we have images/durations
+         logger.warning(f"SRT file {srt_file_abs} not found. Video will be attempted without subtitles if ffmpeg allows, or may fail.")
+         # Consider if subtitles are mandatory. The -vf filter will fail if srt_filename_relative points to a non-existent file.
+         # For now, we let it try. A robust way is to remove the -vf filter from cmd if srt_file_abs doesn't exist.
+
     create_video_from_images_with_audio(
-        image_dir=f"{base_path}/upscaled_images/", 
-        audio_file=f"{base_path}/adam.mp3",
-        output_file=f"{base_path}/story_video.mp4"
+        image_dir=base_path,
+        audio_file_abs=audio_file_abs,
+        srt_file_abs=srt_file_abs, # Will be used by ffmpeg
+        output_file_abs=output_video_abs,
+        image_specs=image_specs, # Pass the calculated specs
+        ffmpeg_executable_path=ffmpeg_executable_path
+        # video_fps is defaulted in the function
     )
 
 # === Main ===
 if __name__ == "__main__":
-    base_path = "./mindset_story"  # Update this with your actual path
-    run_pipeline(base_path)
+    base_path = "./mindset_story" 
+    
+    ffmpeg_path_from_env = os.getenv("FFMPEG_PATH")
+    ffmpeg_path_to_use = ffmpeg_path_from_env if ffmpeg_path_from_env else "ffmpeg"
+    
+    logger.info(f"Using ffmpeg path: {ffmpeg_path_to_use}")
+    run_pipeline(base_path, ffmpeg_executable_path=ffmpeg_path_to_use)

@@ -3,33 +3,68 @@ import json
 import base64
 import requests
 from openai import OpenAI
+import dotenv
 import logging
+
+dotenv.load_dotenv()
+
+# Import logger from app if possible, otherwise set up a fallback
+try:
+    from .app import logger
+except ImportError:
+    # Fallback if run directly (not through app.py)
+    logger = logging.getLogger("story_generator")
+    if not logger.handlers:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[logging.StreamHandler()]
+        )
+
 # Initialize OpenAI client
-client = OpenAI(api_key="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")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Stability API Key
-STABILITY_API_KEY = "sk-0fKcMzsaSqDav7GQU1WdNZm18Ga98iRoPHjsPcoZpRJldwpa"
-
+STABILITY_API_KEY = os.getenv("STABILITY_API_KEY")
+STABILITY_API_URL = os.getenv("STABILITY_API_URL")
 # --- STORY GENERATOR ---
+
+story_prompt = """
+    I have listed down some essential elements of writing an engaging short inspirational story.
+    ### Essential Elements of an Engaging Short Inspirational Story
+
+    1. **Universal Theme**: A theme that resonates with a wide audience, often involving perseverance, hope, or change.
+    2. **Clear Conflict or Challenge**: A problem or obstacle that is faced by the audience.
+    3. **Positive Resolution**: The story provide a positive resolution and should end on a hopeful or uplifting note.
+    4. **Emotional Engagement**: The story should evoke emotions, making the reader feel invested in the outcome.
+    5. **Concise and Focused**: The story should be succinct, with every element contributing to the overall message.
+
+    Now keeping in mind these elements, write an inspirational short story for the topic: {topic}
+
+    PLEASE KEEP THE STORY CRISP AND SHORT.
+
+    Story script:
+    """
 
 class StoryGenerator:
     def __init__(self, model="gpt-4o", temperature=0.1):
         self.model = model
         self.temperature = temperature
 
-    def generate_story(self, prompt: str) -> str:
+    def generate_story(self, prompt: str, topic: str) -> str:
         try:
             response = client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are an expert story writer who writes short inspirational stories."},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt.format(topic=topic)}
                 ],
                 temperature=self.temperature
             )
+            logger.info(f"Story generated: {response.choices[0].message.content}")
             return response.choices[0].message.content
         except Exception as e:
-            logging.info("Error generating story:", e)
+            logger.info("Error generating story:", e)
             raise
 
 # --- IMAGE PROMPT GENERATOR ---
@@ -42,7 +77,7 @@ class ImagePromptGenerator:
     def generate_image_prompts(self, story_script: str) -> list:
         image_prompt = f"""
         You have been given a story script below, and you have to create images for the script which will be converted to a video.
-        The script has been then split into phrases. For each phrase line given below, give an image prompt that captures the line visually.
+        For each line in the script given below, give an image prompt that captures the line visually.
         Use words such as sharp focus and extremely detailed that result in great images.
         Create simple image prompts and do not use a person's name in the prompt.
 
@@ -51,6 +86,8 @@ class ImagePromptGenerator:
 
         Output should be in JSON format:
         [{{"line": "", "image_prompt": ""}}, ...]
+
+        Only return the JSON array, nothing else.
         """
 
         try:
@@ -68,9 +105,10 @@ class ImagePromptGenerator:
                 raw_content = raw_content.lstrip("```json").rstrip("```").strip()
             elif raw_content.startswith("```"):
                 raw_content = raw_content.lstrip("```").rstrip("```").strip()
+            logger.info(f"Image prompts generated: {raw_content}")
             return json.loads(raw_content)
         except Exception as e:
-            logging.info("Error generating image prompts:", e)
+            logger.info("Error generating image prompts:", e)
             raise
 
 # --- IMAGE GENERATOR ---
@@ -91,7 +129,6 @@ def make_body(prompt):
 
 def make_image(prompt, img_path):
     body = make_body(prompt)
-    url = "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image"
 
     headers = {
         "Accept": "application/json",
@@ -99,7 +136,7 @@ def make_image(prompt, img_path):
         "Authorization": f"Bearer {STABILITY_API_KEY}",
     }
 
-    response = requests.post(url, headers=headers, json=body)
+    response = requests.post(STABILITY_API_URL, headers=headers, json=body)
     if response.status_code != 200:
         raise Exception("Non-200 response: " + str(response.text))
 
@@ -115,8 +152,8 @@ class StoryProcessor:
         self.story_generator = story_generator
         self.image_generator = image_generator
 
-    def process_story(self, story_prompt: str):
-        story = self.story_generator.generate_story(story_prompt)
+    def process_story(self, story_prompt: str, topic: str):
+        story = self.story_generator.generate_story(story_prompt, topic)
         image_prompts = self.image_generator.generate_image_prompts(story)
         return story, image_prompts
 
@@ -124,8 +161,8 @@ class StoryProcessor:
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
 
-    def run(self, story_prompt: str, story_name: str):
-        story, image_prompts = self.process_story(story_prompt)
+    def run(self, story_prompt: str, story_name: str, topic: str):
+        story, image_prompts = self.process_story(story_prompt, topic)
         story_dir = f"./{story_name}"
         os.makedirs(story_dir, exist_ok=True)
 
@@ -139,22 +176,19 @@ class StoryProcessor:
         for i, item in enumerate(image_prompts):
             prompt = item["image_prompt"]
             img_path = os.path.join(story_dir, f"{i}.png")
+            logger.info(f"Generating image for prompt: {prompt}")   
             make_image(prompt, img_path)
+            logger.info(f"Image generated: {img_path}")
 
-        logging.info(f"✅ Story and images saved in {story_dir}")
+        logger.info(f"✅ Story and images saved in {story_dir}")
 
 # --- MAIN EXECUTION ---
 
 if __name__ == "__main__":
-    story_prompt = """
-    First write down the most essential elements of writing an engaging short inspirational story.
-    Now keeping in mind these elements, write an inspirational short story from the book Mindset by Carol Dweck.
-    """
-
     story_name = "mindset_story"
 
     story_gen = StoryGenerator()
     image_gen = ImagePromptGenerator()
     processor = StoryProcessor(story_gen, image_gen)
 
-    processor.run(story_prompt, story_name)
+    processor.run(story_prompt, story_name, topic="Book Mindset by Carol Dweck")

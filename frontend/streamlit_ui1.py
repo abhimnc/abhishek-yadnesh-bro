@@ -1,5 +1,11 @@
 import streamlit as st
 import requests
+import os
+import dotenv
+
+dotenv.load_dotenv()
+
+FLASK_API_BASE_URL = os.getenv("FLASK_API_BASE_URL")
 
 # Simulate a session (in production, use login-based auth + DB)
 if "prompt_count" not in st.session_state:
@@ -31,7 +37,7 @@ if st.button("Generate Story"):
         if st.session_state.prompt_count < 2 or st.session_state.paid:
             with st.spinner("Generating multimedia story..."):
                 try:
-                    url = f"http://153.198.2.3:61395/generate/{story_prompt}/{story_name}/"
+                    url = f"{FLASK_API_BASE_URL}/generate/{story_prompt}/{story_name}/"
                     response = requests.post(
                         url,
                         headers={"Content-Type": "application/json"}
