@@ -160,51 +160,54 @@ backend/
 │   │   │       ├── endpoints/
 │   │   │       │   ├── __init__.py
 │   │   │       │   ├── auth.py         # Login, Signup, OAuth2, Refresh, Logout, User Profile
-│   │   │       │   ├── videos.py       # Video creation, status, listing, deletion (future)
-│   │   │       │   ├── payments.py     # Stripe checkout, webhooks, plans, manage subscription (future)
-│   │   │       │   └── admin.py        # (Optional) Admin-specific endpoints (future)
-│   │   │       ├── deps.py             # Common dependencies (get_current_user, db_session, pagination)
-│   │   │       └── schemas.py          # Pydantic schemas if they diverge heavily from SQLModels
+│   │   │       │   └── videos.py       # Video creation, status (Phase 2)
+│   │   │       │   # ├── payments.py     # Stripe checkout, webhooks, plans (future)
+│   │   │       │   # └── admin.py        # (Optional) Admin-specific endpoints (future)
+│   │   │       ├── deps.py             # Common dependencies (get_current_user, db_session, get_usage_service)
+│   │   │       └── schemas.py          # Pydantic schemas (incl. video schemas)
 │   │   ├── core/
 │   │   │   ├── __init__.py
 │   │   │   ├── config.py               # Settings (Pydantic BaseSettings)
 │   │   │   ├── security.py             # Password hashing, JWT creation/validation, token encryption utils
 │   │   │   ├── oauth.py                # OAuth2 client configuration and helpers
-│   │   │   ├── email.py                # Email utilities (added)
-│   │   │   └── celery_app.py           # Celery application instance
+│   │   │   ├── email.py                # Email utilities
+│   │   │   └── celery_app.py           # Celery application instance (incl. video task)
 │   │   ├── db/
 │   │   │   ├── __init__.py
 │   │   │   ├── session.py              # Database session management (async)
-│   │   │   ├── models/                 # SQLModel models (one file per model or grouped)
+│   │   │   ├── models/                 # SQLModel models
 │   │   │   │   ├── __init__.py
-│   │   │   │   ├── base_model.py       # Base model with common fields (added)
+│   │   │   │   ├── base_model.py       # Base model with common fields
 │   │   │   │   ├── user_models.py
-│   │   │   │   ├── video_models.py     # (future)
+│   │   │   │   ├── video_models.py     # Video task, generated video, asset models (Phase 2)
+│   │   │   │   ├── usage_models.py     # User video usage model (Phase 2)
 │   │   │   │   └── payment_models.py
 │   │   │   └── crud/                   # CRUD operations for each model
 │   │   │       ├── __init__.py
-│   │   │       ├── crud_base.py        # Generic CRUD base class (added)
+│   │   │       ├── crud_base.py        # Generic CRUD base class
 │   │   │       ├── crud_user.py
-│   │   │       ├── crud_oauth_account.py  # CRUD operations for OAuthAccount (added)
-│   │   │       ├── crud_plan.py        # CRUD operations for Plan (added)
-│   │   │       └── ... (other cruds, future)
+│   │   │       ├── crud_oauth_account.py
+│   │   │       ├── crud_plan.py
+│   │   │       ├── crud_video.py       # CRUD operations for video models (Phase 2)
+│   │   │       └── crud_usage.py       # CRUD operations for usage model (Phase 2)
+│   │   │       # └── ... (other cruds, future)
 │   │   ├── services/                   # Business logic, interactions with external APIs
 │   │   │   ├── __init__.py
 │   │   │   ├── oauth_service.py        # OAuth2 providers integration (Google)
-│   │   │   ├── llm_service_interface.py # Defines common interface for LLM operations (future)
-│   │   │   ├── llm_providers/          # Implementations for specific LLM providers (future)
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── openai_service.py
-│   │   │   │   └── anthropic_service.py
-│   │   │   ├── video_processing_service.py # Video assembly using FFmpeg (future)
-│   │   │   ├── payment_service.py      # Stripe interaction logic (future)
-│   │   │   ├── cloud_storage_service.py # Uploading/managing files in S3/GCS (future)
-│   │   │   └── usage_service.py        # Logic for tracking and checking user usage (future)
+│   │   │   ├── usage_service.py        # Logic for tracking and checking user usage (Phase 2)
+│   │   │   # ├── llm_service_interface.py # Defines common interface for LLM operations (future)
+│   │   │   # ├── llm_providers/          # Implementations for specific LLM providers (future)
+│   │   │   # │   ├── __init__.py
+│   │   │   # │   ├── openai_service.py
+│   │   │   # │   └── anthropic_service.py
+│   │   │   # ├── video_processing_service.py # Video assembly using FFmpeg (future)
+│   │   │   # ├── payment_service.py      # Stripe interaction logic (future)
+│   │   │   # └── cloud_storage_service.py # Uploading/managing files in S3/GCS (future)
 │   │   └── tasks/                      # Celery tasks
 │   │       ├── __init__.py
-│   │       ├── placeholder_tasks.py    # Basic placeholder tasks for testing Celery (added)
-│   │       ├── video_generation_tasks.py # The main background task for video pipeline (future)
-│   │       └── payment_tasks.py          # Background tasks related to payments (future)
+│   │       ├── placeholder_tasks.py    # Basic placeholder tasks for testing Celery
+│   │       ├── video_generation_tasks.py # Dummy video processing task (Phase 2)
+│   │       # └── payment_tasks.py          # Background tasks related to payments (future)
 │   ├── tests/                          # Unit and integration tests (future)
 │   │   ├── __init__.py
 │   │   ├── conftest.py
@@ -218,12 +221,12 @@ backend/
 │   │   ├── script.py.mako              # Template for migration scripts
 │   │   └── README                      # Alembic README
 │   ├── alembic.ini                     # Alembic configuration
-│   ├── backend_documentation.md        # Documentation file (added)
+│   ├── backend_documentation.md        # Documentation file (updated Phase 2)
 │   └── requirements.txt                # Python dependencies
-├── .venv/                              # Virtual environment (ignored by git) 
-├── pyproject.toml                      # Python project metadata (added)
-├── uv.lock                             # UV lock file (added)
-├── .python-version                     # Python version specification (added)
+├── .venv/                              # Virtual environment (ignored by git)
+├── pyproject.toml                      # Python project metadata
+├── uv.lock                             # UV lock file
+├── .python-version                     # Python version specification
 ├── plan.md                             # This planning document
 └── README.md                           # Project README
 ```

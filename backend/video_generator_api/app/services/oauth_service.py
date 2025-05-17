@@ -151,8 +151,8 @@ class OAuthService:
 
         await user_crud.update(self.db, db_obj=user, obj_in={"last_login_at": datetime.now(timezone.utc)})
 
-        app_access_token = security.create_access_token(subject=user.email)
-        app_refresh_token = security.create_refresh_token(subject=user.email)
+        app_access_token = security.create_access_token(subject=user.id)
+        app_refresh_token = security.create_refresh_token(subject=user.id)
         
         return user, app_access_token, app_refresh_token
 

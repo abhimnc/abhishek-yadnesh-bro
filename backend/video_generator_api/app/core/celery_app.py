@@ -8,6 +8,7 @@ celery_app = Celery(
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
         "app.tasks.placeholder_tasks", 
+        "app.tasks.video_generation_tasks",
         # Add other task modules here as they are created
         # e.g., "app.tasks.video_generation_tasks"
     ]

@@ -5,11 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.crud.crud_base import CRUDBase
 from app.db.models.payment_models import Plan
-from app.api.v1.schemas import PlanCreateSchema, PlanUpdateSchema # Assuming PlanUpdateSchema will be similar or defined
-
-# If PlanUpdateSchema is not defined yet, let's create a basic one or use PlanCreateSchema
-class PlanUpdateSchema(PlanCreateSchema): # Or define specific update fields
-    pass 
+from app.api.v1.schemas import PlanCreateSchema, PlanUpdateSchema
 
 class CRUDPlan(CRUDBase[Plan, PlanCreateSchema, PlanUpdateSchema]):
     async def get_by_name(self, db: AsyncSession, *, name: str) -> Optional[Plan]:

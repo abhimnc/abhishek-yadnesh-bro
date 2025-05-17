@@ -2,11 +2,13 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
+from app.api.v1.endpoints.auth import router as auth_router_v1
+from app.api.v1.endpoints.videos import router as video_router_v1 # Import video router
+from app.core.config import settings
+import logging
 
 load_dotenv()
 
-from app.core.config import settings
-from app.api.v1.endpoints.auth import router as auth_api_router # Import your auth router
 # from app.db.session import init_db # Optional: if you want to run init_db on startup for dev
 
 @asynccontextmanager
@@ -32,20 +34,20 @@ app = FastAPI(
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_origins=[str(origin).strip("/") for origin in settings.BACKEND_CORS_ORIGINS],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
 # Include API routers
-app.include_router(auth_api_router, prefix=settings.API_V1_STR, tags=["Authentication"])
-# Add other routers here for videos, payments etc. as they are developed
+app.include_router(auth_router_v1, prefix=f"{settings.API_V1_STR}/auth", tags=["Authentication"])
+app.include_router(video_router_v1, prefix=f"{settings.API_V1_STR}/videos", tags=["Videos"]) # Add video router
 
 @app.get("/health", tags=["Health Check"])
 async def health_check():
     """Simple health check endpoint."""
-    return {"status": "ok", "message": f"Welcome to {settings.PROJECT_NAME}!"}
+    return {"status": "OK"}
 
 # If you want a root path for API docs redirection or basic info
 @app.get("/", include_in_schema=False)

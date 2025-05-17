@@ -1,6 +1,8 @@
-# Backend Documentation - Phase 1: Core Setup & User Authentication
+# Backend Documentation - Phase 1 & 2: Core Setup, Auth, & Basic Video Tasks
 
-This document details the backend implementation for Phase 1 of the FastAPI Video Generation Platform. Phase 1 focuses on establishing the core project structure, setting up user authentication (including email/password and Google OAuth2), defining initial database models, and integrating a basic Celery setup.
+This document details the backend implementation for Phase 1 and Phase 2 of the FastAPI Video Generation Platform.
+*   **Phase 1**: Focused on establishing the core project structure, setting up user authentication (including email/password and Google OAuth2), defining initial database models (`User`, `OAuthAccount`, `Plan`), and integrating a basic Celery setup.
+*   **Phase 2**: Added models for video generation tracking (`VideoGenerationTask`, `GeneratedVideo`, `GeneratedVideoAsset`), user usage (`UserVideoUsage`), implemented API endpoints for submitting video tasks and checking their status, created a dummy Celery task for simulation, and added a basic usage limit service.
 
 ## Table of Contents
 
@@ -16,15 +18,26 @@ This document details the backend implementation for Phase 1 of the FastAPI Vide
     *   [Base Model (`app/db/models/base_model.py`)](#base-model-appdbmodelsbase_modelpy)
     *   [User Models (`app/db/models/user_models.py`)](#user-models-appdbmodelsuser_modelspy)
     *   [Payment Models (`app/db/models/payment_models.py`)](#payment-models-appdbmodelspayment_modelspy)
+    *   [Video Models (`app/db/models/video_models.py`)](#video-models-appdbmodelsvideo_modelspy)
+    *   [Usage Models (`app/db/models/usage_models.py`)](#usage-models-appdbmodelsusage_modelspy)
     *   [CRUD Operations (`app/db/crud/`)](#crud-operations-appdbcrud)
+        *   [Base CRUD (`crud_base.py`)](#base-crud-crud_basepy)
+        *   [User CRUD (`crud_user.py`)](#user-crud-crud_userpy)
+        *   [OAuth Account CRUD (`crud_oauth_account.py`)](#oauth-account-crud-crud_oauth_accountpy)
+        *   [Plan CRUD (`crud_plan.py`)](#plan-crud-crud_planpy)
+        *   [Video CRUD (`crud_video.py`)](#video-crud-crud_videopy)
+        *   [Usage CRUD (`crud_usage.py`)](#usage-crud-crud_usagepy)
 4.  [API Layer](#api-layer)
     *   [API Schemas (`app/api/v1/schemas.py`)](#api-schemas-appapiv1schemaspy)
     *   [API Dependencies (`app/api/v1/deps.py`)](#api-dependencies-appapiv1depspy)
     *   [Authentication Endpoints (`app/api/v1/endpoints/auth.py`)](#authentication-endpoints-appapiv1endpointsauthpy)
+    *   [Video Endpoints (`app/api/v1/endpoints/videos.py`)](#video-endpoints-appapiv1endpointsvideospy)
 5.  [Services Layer](#services-layer)
     *   [OAuth Service (`app/services/oauth_service.py`)](#oauth-service-appservicesoauth_servicepy)
+    *   [Usage Service (`app/services/usage_service.py`)](#usage-service-appservicesusage_servicepy)
 6.  [Background Tasks (Celery)](#background-tasks-celery)
     *   [Placeholder Tasks (`app/tasks/placeholder_tasks.py`)](#placeholder-tasks-apptasksplaceholder_taskspy)
+    *   [Video Generation Task (`app/tasks/video_generation_tasks.py`)](#video-generation-task-apptasksvideo_generation_taskspy)
 7.  [Main Application (`app/main.py`)](#main-application-appmainpy)
 8.  [Database Migrations (Alembic)](#database-migrations-alembic)
     *   [Configuration (`alembic.ini`, `alembic/env.py`)](#configuration-alembicini-alembicenvpy)
@@ -40,62 +53,69 @@ This document details the backend implementation for Phase 1 of the FastAPI Vide
     *   [Running FastAPI Server](#running-fastapi-server)
     *   [Running Celery Worker](#running-celery-worker)
 11. [Key Decisions & Considerations for Phase 1](#key-decisions--considerations-for-phase-1)
+12. [Phase 2 Implementation Summary](#phase-2-implementation-summary)
 
 ---
 
 ## 1. Project Structure Overview
 
-The project is organized within the `backend/video_generator_api/` directory.
+The project structure after Phase 2:
 
 ```
 video_generator_api/
 ├── alembic/                  # Alembic migration scripts and environment
-├── app/                      # Main application code
+├── app/
 │   ├── __init__.py
-│   ├── api/                  # API related modules (versioning, endpoints, schemas)
+│   ├── api/
 │   │   ├── __init__.py
 │   │   └── v1/
 │   │       ├── __init__.py
-│   │       ├── deps.py       # API dependencies (e.g., get_current_user)
-│   │       ├── endpoints/    # API route definitions
+│   │       ├── deps.py       # API dependencies (get_current_user, get_usage_service, etc.)
+│   │       ├── endpoints/
 │   │       │   ├── __init__.py
-│   │       │   └── auth.py   # Authentication endpoints
-│   │       └── schemas.py    # Pydantic schemas for API I/O
-│   ├── core/                 # Core logic (config, security, Celery app, OAuth)
+│   │       │   ├── auth.py   # Authentication endpoints
+│   │       │   └── videos.py # Video task creation and status endpoints (Phase 2)
+│   │       └── schemas.py    # Pydantic schemas for API I/O (incl. video schemas)
+│   ├── core/
 │   │   ├── __init__.py
-│   │   ├── celery_app.py
+│   │   ├── celery_app.py   # Celery app instance (includes video task)
 │   │   ├── config.py
+│   │   ├── email.py
 │   │   ├── oauth.py
 │   │   └── security.py
-│   ├── db/                   # Database interaction layer
+│   ├── db/
 │   │   ├── __init__.py
-│   │   ├── crud/             # CRUD operations for models
+│   │   ├── crud/
 │   │   │   ├── __init__.py
 │   │   │   ├── crud_base.py
 │   │   │   ├── crud_oauth_account.py
 │   │   │   ├── crud_plan.py
-│   │   │   └── crud_user.py
-│   │   ├── models/           # SQLModel definitions
+│   │   │   ├── crud_user.py
+│   │   │   ├── crud_video.py # Video CRUD operations (Phase 2)
+│   │   │   └── crud_usage.py # Usage CRUD operations (Phase 2)
+│   │   ├── models/
 │   │   │   ├── __init__.py
 │   │   │   ├── base_model.py
 │   │   │   ├── payment_models.py
-│   │   │   └── user_models.py
-│   │   └── session.py        # Database session management (async)
-│   ├── services/             # Business logic services
+│   │   │   ├── user_models.py
+│   │   │   ├── video_models.py # Video models (Phase 2)
+│   │   │   └── usage_models.py # Usage model (Phase 2)
+│   │   └── session.py
+│   ├── services/
 │   │   ├── __init__.py
-│   │   └── oauth_service.py  # Google OAuth processing logic
-│   ├── tasks/                # Celery task definitions
+│   │   ├── oauth_service.py
+│   │   └── usage_service.py  # Usage limit checking service (Phase 2)
+│   ├── tasks/
 │   │   ├── __init__.py
-│   │   └── placeholder_tasks.py
-│   └── main.py               # FastAPI application instantiation and main routers
-├── .env                      # Local environment variables (Gitignored)
-├── .env.example              # Example environment variables
-├── .gitignore                # Git ignore rules
-├── alembic.ini               # Alembic configuration file
-└── requirements.txt          # Python package dependencies
+│   │   ├── placeholder_tasks.py
+│   │   └── video_generation_tasks.py # Dummy video processing task (Phase 2)
+│   └── main.py               # FastAPI app (includes video router)
+├── .env
+├── .env.example
+├── .gitignore
+├── alembic.ini
+└── requirements.txt
 ```
-
-All directories intended to be Python packages contain an `__init__.py` file.
 
 ---
 
@@ -202,37 +222,92 @@ The database layer uses SQLModel (which combines SQLAlchemy and Pydantic) for OR
     *   Fields: `name` (unique), `stripe_price_id` (unique, indexed), `video_limit_per_period`, `max_video_duration_seconds`, `features` (JSONB), `price_monthly` (Decimal), `price_yearly` (Decimal), `currency`, `description`, `is_active`, `display_order`.
     *   This model represents subscription plans available in the system.
 
+### Video Models (`app/db/models/video_models.py`)
+
+*   **Purpose**: Defines models related to video generation tasks and their outputs. Added in Phase 2.
+*   **Key Components**:
+    *   `VideoGenerationTaskStatus` (Enum): Defines possible statuses (`pending`, `processing`, `completed`, `failed`, `cancelled`). Uses `sqlalchemy.dialects.postgresql.ENUM` for database type.
+    *   `VideoGenerationTask` (SQLModel, table=True): Represents a request to generate a video.
+        *   Fields: `user_id` (FK), `prompt_text`, `status` (Enum), `progress_percentage`, `error_message` (nullable), `celery_task_id` (nullable).
+        *   Relationship: One-to-one with `GeneratedVideo` (via `generated_video` back-populating attribute).
+    *   `GeneratedVideo` (SQLModel, table=True): Represents the final generated video metadata.
+        *   Fields: `task_id` (FK, unique), `user_id` (FK, denormalized), `title`, `final_video_url` (nullable), `duration_seconds` (nullable), `visibility`.
+        *   Relationships: One-to-one back to `VideoGenerationTask` (`task`), one-to-many to `GeneratedVideoAsset` (`assets`).
+    *   `GeneratedVideoAsset` (SQLModel, table=True): Represents individual assets (like images) used in a video.
+        *   Fields: `video_id` (FK), `asset_type`, `order_index`, `asset_url`.
+        *   Relationship: Many-to-one back to `GeneratedVideo` (`video`).
+
+### Usage Models (`app/db/models/usage_models.py`)
+
+*   **Purpose**: Defines models for tracking user resource usage, specifically video generation counts per period. Added in Phase 2.
+*   **Key Components**:
+    *   `UserVideoUsage` (SQLModel, table=True): Tracks video creations per user per month.
+        *   Fields: `user_id` (FK), `period_identifier` (YYYY-MM format), `videos_created_this_period`, `period_start_date`, `period_end_date`.
+        *   Constraint: Unique constraint on (`user_id`, `period_identifier`).
+
 ### CRUD Operations (`app/db/crud/`)
 
-Generic and model-specific Create, Read, Update, Delete operations.
+#### Base CRUD (`crud_base.py`)
 
-*   **`crud_base.py`**:
-    *   `CRUDBase`: A generic class providing common async CRUD methods: `get`, `get_multi`, `get_multi_with_total_count`, `create`, `update`, `remove`.
-    *   Uses Pydantic schemas for input type validation (`CreateSchemaType`, `UpdateSchemaType`).
-*   **`crud_user.py`**:
-    *   `CRUDUser`: Inherits from `CRUDBase` for the `User` model.
-    *   `get_by_email()`: Fetches a user by email (case-insensitive).
-    *   `get_by_verification_token()`: Fetches a user by their email verification token.
-    *   `create()`: Original method for creating users, primarily for email/password signup, expecting `UserCreateSchema`. Hashes password and sets `auth_provider`.
-    *   `create_user_oauth()`: New method specifically for creating users that can accommodate OAuth signups or internal user creation. Expects `UserCreateInternalSchema`, which allows for an optional `hashed_password` and explicit `auth_provider`.
-    *   `update_last_login()`: Updates the `last_login_at` timestamp for a user.
-    *   Helper methods: `is_superuser()`, `is_active()`.
-    *   An instance `user_crud` is created for use in services and API endpoints.
-*   **`crud_oauth_account.py`**:
-    *   `CRUDOAuthAccount`: Inherits from `CRUDBase` for the `OAuthAccount` model.
-    *   Defines Pydantic schemas `OAuthAccountCreateSchema` and `OAuthAccountUpdateSchema` for data validation during CRUD operations. These schemas expect already encrypted token data.
-    *   `get_by_provider_and_user_id()`: Fetches an OAuth account by provider and provider's user ID. (Renamed from `get_by_provider_user_id`).
-    *   `create_with_user_id()`: Method for creating `OAuthAccount` instances. It expects an `OAuthAccountCreateSchema` where token fields (`encrypted_access_token`, `encrypted_refresh_token`) are assumed to be already encrypted by the calling service (e.g., `OAuthService`).
-    *   The base `update()` method from `CRUDBase` is used, expecting an `OAuthAccountUpdateSchema` with already encrypted token data if tokens are being updated.
-    *   An instance `oauth_account_crud` is created.
-*   **`crud_plan.py`**:
-    *   `CRUDPlan`: Inherits from `CRUDBase` for the `Plan` model.
-    *   Defines a basic `PlanUpdateSchema`.
-    *   `get_by_name()`: Fetches a plan by its name.
-    *   `get_active_plans()`: Fetches all active plans, ordered by `display_order`.
-    *   An instance `plan_crud` is created.
+*   `CRUDBase`: A generic class providing common async CRUD methods: `get`, `get_multi`, `get_multi_with_total_count`, `create`, `update`, `remove`.
+*   Uses Pydantic schemas for input type validation (`CreateSchemaType`, `UpdateSchemaType`).
 
----
+#### User CRUD (`crud_user.py`)
+
+*   `CRUDUser`: Inherits from `CRUDBase` for the `User` model.
+*   `get_by_email()`: Fetches a user by email (case-insensitive).
+*   `get_by_verification_token()`: Fetches a user by their email verification token.
+*   `create()`: Original method for creating users, primarily for email/password signup, expecting `UserCreateSchema`. Hashes password and sets `auth_provider`.
+*   `create_user_oauth()`: New method specifically for creating users that can accommodate OAuth signups or internal user creation. Expects `UserCreateInternalSchema`, which allows for an optional `hashed_password` and explicit `auth_provider`.
+*   `update_last_login()`: Updates the `last_login_at` timestamp for a user.
+*   Helper methods: `is_superuser()`, `is_active()`.
+*   An instance `user_crud` is created for use in services and API endpoints.
+
+#### OAuth Account CRUD (`crud_oauth_account.py`)
+
+*   `CRUDOAuthAccount`: Inherits from `CRUDBase` for the `OAuthAccount` model.
+*   Defines Pydantic schemas `OAuthAccountCreateSchema` and `OAuthAccountUpdateSchema` for data validation during CRUD operations. These schemas expect already encrypted token data.
+*   `get_by_provider_and_user_id()`: Fetches an OAuth account by provider and provider's user ID. (Renamed from `get_by_provider_user_id`).
+*   `create_with_user_id()`: Method for creating `OAuthAccount` instances. It expects an `OAuthAccountCreateSchema` where token fields (`encrypted_access_token`, `encrypted_refresh_token`) are assumed to be already encrypted by the calling service (e.g., `OAuthService`).
+*   The base `update()` method from `CRUDBase` is used, expecting an `OAuthAccountUpdateSchema` with already encrypted token data if tokens are being updated.
+*   An instance `oauth_account_crud` is created.
+
+#### Plan CRUD (`crud_plan.py`)
+
+*   `CRUDPlan`: Inherits from `CRUDBase` for the `Plan` model.
+*   Defines a basic `PlanUpdateSchema`.
+*   `get_by_name()`: Fetches a plan by its name.
+*   `get_active_plans()`: Fetches all active plans, ordered by `display_order`.
+*   An instance `plan_crud` is created.
+
+#### Video CRUD (`crud_video.py`)
+
+*   **Purpose**: Provides CRUD operations for video-related models. Added in Phase 2.
+*   **Key Components**:
+    *   Internal Pydantic schemas (`VideoGenerationTaskCreateSchema`, etc.) for validation.
+    *   `CRUDVideoGenerationTask`: Inherits `CRUDBase`.
+        *   `update_status_and_progress()`: Atomically updates status, progress, error message using SQLAlchemy core `update`.
+        *   `update_celery_task_id()`: Updates the Celery task ID.
+        *   `get_by_user()`: Retrieves tasks for a user.
+        *   `get_with_video()`: Retrieves a task and eagerly loads the related `GeneratedVideo`.
+    *   `CRUDGeneratedVideo`: Inherits `CRUDBase`.
+        *   `get_by_user()`: Retrieves videos for a user.
+        *   `get_by_task_id()`: Retrieves a video by its task ID.
+    *   `CRUDGeneratedVideoAsset`: Inherits `CRUDBase` (standard methods).
+    *   Instantiated objects: `video_task_crud`, `generated_video_crud`, `video_asset_crud`.
+
+#### Usage CRUD (`crud_usage.py`)
+
+*   **Purpose**: Provides CRUD operations for the `UserVideoUsage` model. Added in Phase 2.
+*   **Key Components**:
+    *   `CRUDUserVideoUsage`: Inherits `CRUDBase`.
+        *   `get_current_period_record()`: Fetches the record for the current month.
+        *   `_get_current_month_period()`: Helper to calculate month start/end dates.
+        *   `get_or_create_current_period()`: Gets the current record or creates it if missing.
+        *   `increment_usage()`: Atomically increments the `videos_created_this_period` counter using SQLAlchemy core `update`.
+    *   Instantiated object: `user_usage_crud`.
+
+---    
 
 ## 4. API Layer
 
@@ -248,6 +323,13 @@ Handles incoming HTTP requests, validation, and responses. Versioned under `/api
     *   **OAuth**: `GoogleOAuthCallbackSchema` (for handling the OAuth callback query parameters).
     *   **OAuthAccount**: `OAuthAccountCreateSchema` (used by `OAuthService` to prepare data for `crud_oauth_account`).
     *   **Message**: `MessageResponse` (simple schema for returning text messages to the client).
+*   **Phase 2 Additions**:
+    *   Imported `VideoGenerationTaskStatus` Enum.
+    *   `VideoCreateRequestSchema`: Input for creating a video task (`prompt_text`).
+    *   `VideoTaskBaseSchema`: Base for task responses (`task_id`, `status`).
+    *   `VideoTaskCreateResponseSchema`: Response after submitting a task (`task_id`, `status`, `message`).
+    *   `VideoTaskStatusResponseSchema`: Response for checking task status (`task_id`, `status`, `progress_percentage`, `error_message`, `video_id`, `video_url`).
+    *   `GeneratedVideoReadSchema`: Basic schema for listing completed videos (future use).
 *   Uses `EmailStr`, `HttpUrl`, `datetime` for specific field type validation.
 
 ### API Dependencies (`app/api/v1/deps.py`)
@@ -259,6 +341,8 @@ Handles incoming HTTP requests, validation, and responses. Versioned under `/api
     *   `get_current_user()`: Decodes the JWT from the `Authorization: Bearer` header, validates it, and fetches the corresponding user from the database. Raises `HTTPException` for errors.
     *   `get_current_active_user()`: Depends on `get_current_user` and checks if the user is active.
     *   `get_current_active_superuser()`: Depends on `get_current_active_user` and checks if the user is a superuser.
+*   **Phase 2 Additions**:
+    *   `get_usage_service()`: Dependency provider that creates and returns an instance of `UsageService`.
 
 ### Authentication Endpoints (`app/api/v1/endpoints/auth.py`)
 
@@ -313,7 +397,33 @@ Handles incoming HTTP requests, validation, and responses. Versioned under `/api
             *   Generates application-specific JWTs (access and refresh tokens).
         *   Response: `Token`.
 
----
+### Video Endpoints (`app/api/v1/endpoints/videos.py`)
+
+*   **Purpose**: Implements endpoints for video task creation and status checking. Added in Phase 2.
+*   **Endpoints**: 
+    *   **`POST /`**: (Submit a new video generation task)
+        *   Requires Auth: Depends on `get_current_active_user`.
+        *   Request: `VideoCreateRequestSchema` (`prompt_text`).
+        *   Dependencies: `get_async_session`, `get_current_active_user`, `get_usage_service`.
+        *   Logic:
+            1.  Calls `usage_service.check_and_increment_usage()` (raises 403 if limit reached).
+            2.  Creates `VideoGenerationTask` record via `video_task_crud.create()`.
+            3.  Commits transaction (task creation & usage increment).
+            4.  Enqueues `simulate_video_processing` Celery task.
+            5.  Updates the DB task with the Celery task ID (in a separate transaction context for safety).
+            6.  Handles potential Celery enqueue errors (attempts to mark task as failed).
+        *   Response: `VideoTaskCreateResponseSchema` (Status 202 Accepted).
+    *   **`GET /{task_id}/status`**: (Get the status of a video generation task)
+        *   Requires Auth: Depends on `get_current_active_user`.
+        *   Dependencies: `get_async_session`, `get_current_active_user`.
+        *   Logic:
+            1.  Fetches `VideoGenerationTask` using `video_task_crud.get_with_video()` (eager loads related `GeneratedVideo`).
+            2.  Checks if task exists (404 if not).
+            3.  Checks if the current user owns the task (403 if not, superusers bypass).
+            4.  Formats `VideoTaskStatusResponseSchema`, including `video_id` and `video_url` if the task is 'completed' and the associated `GeneratedVideo` exists.
+        *   Response: `VideoTaskStatusResponseSchema`.
+
+--- 
 
 ## 5. Services Layer
 
@@ -354,7 +464,19 @@ Contains business logic that orchestrates operations between the API layer and t
         *   Returns a tuple: `(User, app_access_token, app_refresh_token)`.
 *   **`get_oauth_service()` Dependency**: A FastAPI dependency provider function that creates and returns an instance of `OAuthService`.
 
----
+### Usage Service (`app/services/usage_service.py`)
+
+*   **Purpose**: Encapsulates logic for checking and managing user resource usage limits. Added in Phase 2.
+*   **`UsageService` Class**: 
+    *   **Initialization**: Takes an `AsyncSession`.
+    *   **`check_and_increment_usage(user: User)` Method**:
+        1.  Gets or creates the `UserVideoUsage` record for the current month using `user_usage_crud`.
+        2.  Compares `videos_created_this_period` against a hardcoded limit (`DEFAULT_FREE_PLAN_VIDEO_LIMIT = 5` for Phase 2).
+        3.  Raises `HTTPException` (403 Forbidden) if the limit is reached.
+        4.  If limit not reached, calls `user_usage_crud.increment_usage()` to increment the counter.
+        5.  **Important**: Does not commit the transaction; this is handled by the calling API endpoint to ensure atomicity with task creation.
+
+---   
 
 ## 6. Background Tasks (Celery)
 
@@ -370,7 +492,23 @@ Celery is set up for handling long-running background operations, though no spec
 *   Both tasks include logging via print statements to demonstrate task execution progress.
 *   The first task uses `acks_late=True` to demonstrate how to configure Celery to acknowledge tasks only after successful completion.
 
----
+### Video Generation Task (`app/tasks/video_generation_tasks.py`)
+
+*   **Purpose**: Defines the (currently dummy) Celery task for processing video generation requests. Added in Phase 2.
+*   **Task**: `simulate_video_processing(task_db_id_str: str)`
+    *   `@celery_app.task(acks_late=True, bind=True)`: Registered Celery task.
+    *   **Logic**: 
+        1.  Takes the database ID of the `VideoGenerationTask` as input.
+        2.  Uses nested async helper functions (`update_task_status`, `run_simulation`) and `asyncio.run()` to manage async DB operations within the sync Celery task runner.
+        3.  Updates task status to 'processing'.
+        4.  Simulates work steps with `time.sleep()` and updates `progress_percentage` incrementally.
+        5.  Randomly determines success or failure.
+        6.  On success: Creates a `GeneratedVideo` record with a placeholder URL and updates task status to 'completed'.
+        7.  On failure: Updates task status to 'failed' and sets an error message.
+        8.  Includes error handling to attempt marking the task as 'failed' if an unexpected exception occurs during simulation.
+    *   **Note**: The use of `asyncio.run()` inside a sync task is functional for simulation but should be refactored for production async workers (e.g., using `async def` Celery tasks). 
+
+--- 
 
 ## 7. Main Application (`app/main.py`)
 
@@ -383,9 +521,12 @@ Celery is set up for handling long-running background operations, though no spec
     *   **Routers**: Includes the `auth_router_v1` from `app.api.v1.endpoints.auth` under the prefix `/api/v1/auth`.
     *   **Health Check**: A simple `/health` endpoint providing an API status check.
     *   **Root Endpoint**: A `/` endpoint that provides a welcome message.
+*   **Phase 2 Changes**:
+    *   Imports `videos` router from `app.api.v1.endpoints`.
+    *   Includes the `video_router_v1.router` using `app.include_router` with prefix `/api/v1/videos` and tag "Videos".
 *   **Note**: Database initialization function `init_db()` is commented out, as Alembic is used for schema management in production.
 
----
+--- 
 
 ## 8. Database Migrations (Alembic)
 
@@ -396,10 +537,12 @@ Alembic is used for managing database schema migrations.
 *   **`alembic.ini`**:
     *   The `sqlalchemy.url` is configured to use an environment variable: `sqlalchemy.url = %(DATABASE_URL)s`. This means the `DATABASE_URL` must be available in the environment when running Alembic commands.
 *   **`alembic/env.py`**:
-    *   Modified to work with an asynchronous SQLAlchemy engine (`create_async_engine`) and SQLModel.
-    *   Imports all SQLModel table models (`User`, `OAuthAccount`, `Plan`, etc.) and the `SQLModel.metadata` object to `target_metadata`. This allows Alembic's autogenerate feature to detect model changes.
-    *   The `run_migrations_online` function is adapted for async execution.
-    *   Retrieves `DATABASE_URL` from `os.getenv("DATABASE_URL")` or falls back to `config.get_main_option("sqlalchemy.url")`.
+    *   **Phase 2 Changes**:
+        *   Imports all new models (`VideoGenerationTask`, `GeneratedVideo`, `GeneratedVideoAsset`, `UserVideoUsage`) to ensure `autogenerate` detects them.
+        *   Added `load_dotenv()` to load `.env` file.
+        *   Added standard SQLAlchemy naming conventions to `SQLModel.metadata`.
+        *   Added `connection.execute()` calls within `do_run_migrations` to conditionally create the custom PostgreSQL ENUM types (`videogenerationtaskstatus`, `authprovider`) using `DO $$ ... END $$;` blocks. This ensures types exist before tables are created/modified.
+        *   Ensures `DATABASE_URL` is fetched from environment variables.
 
 ### Usage
 
@@ -424,7 +567,7 @@ Alembic is used for managing database schema migrations.
     alembic upgrade head  # Applies all pending migrations
     ```
 
----
+--- 
 
 ## 9. Supporting Files
 
@@ -434,7 +577,7 @@ Alembic is used for managing database schema migrations.
     *   `.env.example`: Provides a template for required environment variables.
     *   `.env`: (Gitignored) Stores actual environment variable values for local development (e.g., database credentials, API keys, `FERNET_KEY`). This file is loaded by `app/core/config.py`.
 
----
+--- 
 
 ## 10. Running the Application
 
@@ -502,7 +645,7 @@ celery -A app.core.celery_app worker -l info -P solo # Use -P solo on Windows if
 ```
 Ensure your Redis server (specified in `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND`) is running.
 
----
+--- 
 
 ## 11. Key Decisions & Considerations for Phase 1
 
@@ -525,3 +668,16 @@ Ensure your Redis server (specified in `CELERY_BROKER_URL` and `CELERY_RESULT_BA
 *   **Basic Celery Integration**: Celery is set up, ready for more complex background tasks in later phases.
 
 This documentation provides a snapshot of the backend after Phase 1. It will be updated as the project progresses through subsequent phases.
+
+---
+
+## 12. Phase 2 Implementation Summary
+
+*   **Models**: Added database models for tracking video tasks (`VideoGenerationTask`), results (`GeneratedVideo`), assets (`GeneratedVideoAsset`), and monthly usage (`UserVideoUsage`).
+*   **CRUD**: Implemented asynchronous CRUD operations for all new models.
+*   **Usage Service**: Created a service (`UsageService`) to check video creation limits (currently hardcoded) and increment usage.
+*   **API Endpoints**: Added `POST /api/v1/videos/` to submit tasks and `GET /api/v1/videos/{task_id}/status` to check progress.
+*   **Celery Task**: Implemented a dummy Celery task (`simulate_video_processing`) that updates task status and progress in the database, simulating the generation process.
+*   **Integration**: Integrated the new components: router included in `main.py`, Celery task included in `celery_app.py`, CRUDs used by endpoints/tasks, usage service used by the creation endpoint.
+*   **Migrations**: Updated Alembic environment to handle new models and ensure custom ENUM types are created.
+*   **Focus**: Phase 2 successfully sets up the infrastructure for submitting video tasks and monitoring their status, using a dummy backend process and basic usage limits, without integrating actual LLM or video processing tools yet.

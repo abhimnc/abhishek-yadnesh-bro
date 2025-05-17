@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
@@ -14,7 +14,7 @@ class SQLModelBase(SQLModel):
         nullable=False,
     )
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         nullable=False,
         sa_type=TIMESTAMP(timezone=True),
         sa_column_kwargs={
@@ -22,7 +22,7 @@ class SQLModelBase(SQLModel):
         }
     )
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         nullable=False,
         sa_type=TIMESTAMP(timezone=True),
         sa_column_kwargs={

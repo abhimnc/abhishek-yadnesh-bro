@@ -44,7 +44,10 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         return results.scalars().all(), total_count_result.scalar_one()
 
     async def create(self, db: AsyncSession, *, obj_in: CreateSchemaType) -> ModelType:
-        obj_in_data = jsonable_encoder(obj_in) # Converts Pydantic model to dict
+        if isinstance(obj_in, dict):
+            obj_in_data = obj_in
+        else:
+            obj_in_data = obj_in.model_dump() if hasattr(obj_in, "model_dump") else obj_in.dict()
         db_obj = self.model(**obj_in_data)  # type: ignore
         db.add(db_obj)
         await db.flush() # Use flush to get the ID before commit, if needed by other operations

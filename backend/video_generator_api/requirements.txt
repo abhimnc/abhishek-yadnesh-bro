@@ -1,22 +1,32 @@
 # FastAPI and related
-fastapi
-uvicorn[standard]
+fastapi>=0.100.0,<0.112.0
+uvicorn[standard]>=0.23.0,<0.30.0
 
 # Database & ORM
-sqlmodel
-psycopg2-binary
-alembic
+sqlmodel>=0.0.16,<0.1.0
+# For PostgreSQL. psycopg2-binary is common, but psycopg (v3) is newer.
+# Choose one based on your project's preference and setup.
+psycopg2-binary>=2.9.7,<3.0.0
+# OR for psycopg3:
+# psycopg[binary]>=3.1.12,<3.2.0
+alembic>=1.12.0,<1.14.0
 
 # Auth & Security
-python-jose[cryptography]
-passlib[bcrypt]
-authlib
+python-jose[cryptography]>=3.3.0,<3.4.0
+passlib[bcrypt]>=1.7.4,<1.8.0
+authlib>=1.2.1,<1.4.0
+PyJWT>=2.8.0,<2.9.0 # For `import jwt` used in deps.py
+
+# Pydantic and Settings
+pydantic>=2.5.0,<2.8.0
+pydantic-settings>=2.1.0,<2.3.0
+email-validator>=2.1.0,<2.2.0 # For Pydantic's EmailStr, AnyUrl
 
 # Celery
-celery
-redis # Example broker/backend, adjust if using RabbitMQ etc.
+celery>=5.3.6,<5.4.0
+redis>=5.0.1,<5.1.0 # Example broker, replace if using RabbitMQ etc.
 
 # Utilities
-python-dotenv
+python-dotenv>=1.0.0,<1.1.0
 
 # Add other dependencies as needed 

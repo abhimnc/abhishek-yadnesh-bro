@@ -32,7 +32,7 @@ from app.api.v1.schemas import (
 from app.services.oauth_service import OAuthService, get_oauth_service
 from app.core.email import send_verification_email
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(tags=["Authentication"])
 
 
 @router.post("/signup", response_model=MessageResponse)
@@ -211,10 +211,10 @@ async def login(
     refresh_token_expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     
     access_token = create_access_token(
-        subject=user.email, expires_delta=access_token_expires
+        subject=user.id, expires_delta=access_token_expires
     )
     refresh_token = create_refresh_token(
-        subject=user.email, expires_delta=refresh_token_expires
+        subject=user.id, expires_delta=refresh_token_expires
     )
     return {
         "access_token": access_token,
@@ -253,7 +253,8 @@ async def refresh_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = await user_crud.get_by_email(db, email=token_subject)
+    # We need to get the user by ID now, not email
+    user = await user_crud.get(db, id=token_subject)
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -263,7 +264,7 @@ async def refresh_token(
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     new_access_token = create_access_token(
-        subject=user.email, expires_delta=access_token_expires
+        subject=user.id, expires_delta=access_token_expires
     )
     return {
         "access_token": new_access_token,
