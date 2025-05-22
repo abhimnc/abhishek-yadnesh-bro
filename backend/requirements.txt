@@ -3,3 +3,4 @@ streamlit
 flask
 openai
 python-dotenv
+openai-whisper
