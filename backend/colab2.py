@@ -6,7 +6,7 @@ import torch
 import logging
 import subprocess
 import dotenv
-import re # Added for normalize_word
+import re
 
 dotenv.load_dotenv()
 
@@ -32,6 +32,7 @@ VOICE_IDS = {
     "adam": "aura-zeus-en"
 }
 API_KEY_DEEPGRAM = os.getenv("DEEPGRAM_API_KEY")
+DEEPGRAM_MAX_CHARS = 2000 # Deepgram's character limit
 
 device1 = "cuda" if torch.cuda.is_available() else "cpu"
 WHISPER_MODEL = whisper.load_model("large", device=device1)
@@ -42,14 +43,14 @@ def create_script(json_path):
         logger.info(f"Create_script: loading json file path: {json_path}")
         data = json.load(open(json_path))
         story_lines = [ele.get("line") for ele in data.get("image_prompts",[])]
-        story = " ".join(story_lines)
-        return story
+        return story_lines # Return a list of lines, not a single concatenated string
     except Exception as e:
         logger.info(f'Error creating script: {e}')
+        return []
 
 def convert_text_to_speech(text, voice_id, output_path):
     try:
-        logger.info(f"Convert_text_to_speech: text: {text}")
+        logger.info(f"Convert_text_to_speech: text length: {len(text)}")
         response = requests.post("https://api.deepgram.com/v1/speak",
             headers={
                 "Authorization": f"Token {API_KEY_DEEPGRAM}"
@@ -62,10 +63,13 @@ def convert_text_to_speech(text, voice_id, output_path):
             with open(output_path, 'wb') as f:
                 f.write(response.content)
             logger.info(f'Audio saved: {output_path}')
+            return True
         else:
             logger.info(f'Failed to generate audio: {response.status_code} - {response.text}')
+            return False
     except Exception as e:
         logger.info(f'Error converting text to speech: {e}')
+        return False
 
 def generate_audio_files(base_path, voice_name="adam"):
     try:
@@ -75,12 +79,74 @@ def generate_audio_files(base_path, voice_name="adam"):
         story_json_file = json_files[0] if json_files else None
         
         if story_json_file:
-            script = create_script(os.path.join(dir_path, story_json_file))
+            # Get story lines as a list
+            story_lines = create_script(os.path.join(dir_path, story_json_file))
             audio_path = os.path.join(dir_path, f"{voice_name}.mp3")
-            logger.info(f"Audio path: {audio_path}")
+            
             if not os.path.exists(audio_path):
                 logger.info(f"Audio file does not exist, generating: {audio_path}")
-                convert_text_to_speech(script, VOICE_IDS[voice_name], audio_path)
+                
+                # --- New Logic for splitting text and concatenating audio ---
+                temp_audio_files = []
+                current_chunk = ""
+                chunk_index = 0
+
+                for line in story_lines:
+                    if len(current_chunk) + len(line) + 1 <= DEEPGRAM_MAX_CHARS: # +1 for potential space
+                        current_chunk += (line + " ")
+                    else:
+                        if current_chunk: # Process the current chunk if not empty
+                            temp_audio_path = os.path.join(dir_path, f"temp_audio_{chunk_index}.mp3")
+                            if convert_text_to_speech(current_chunk.strip(), VOICE_IDS[voice_name], temp_audio_path):
+                                temp_audio_files.append(temp_audio_path)
+                                chunk_index += 1
+                            else:
+                                logger.error(f"Failed to generate audio for chunk {chunk_index}.")
+                                # Decide how to handle failure: raise error, skip, etc.
+                                return 
+                        current_chunk = (line + " ") # Start new chunk with current line
+
+                # Process any remaining chunk
+                if current_chunk:
+                    temp_audio_path = os.path.join(dir_path, f"temp_audio_{chunk_index}.mp3")
+                    if convert_text_to_speech(current_chunk.strip(), VOICE_IDS[voice_name], temp_audio_path):
+                        temp_audio_files.append(temp_audio_path)
+                    else:
+                        logger.error(f"Failed to generate audio for final chunk {chunk_index}.")
+                        return
+
+                if not temp_audio_files:
+                    logger.error("No audio chunks were successfully generated.")
+                    return
+
+                # Concatenate all temporary audio files into the final audio file
+                concat_list_path = os.path.join(dir_path, "concat_audio_list.txt")
+                with open(concat_list_path, "w") as f:
+                    for temp_file in temp_audio_files:
+                        f.write(f"file '{os.path.basename(temp_file)}'\n") # write relative path for ffmpeg concat
+
+                original_dir = os.getcwd()
+                os.chdir(dir_path) # Change directory to where audio files are located
+                try:
+                    cmd = [
+                        "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                        "-i", "concat_audio_list.txt", "-c", "copy", os.path.basename(audio_path)
+                    ]
+                    logger.info(f"Concatenating audio files: {' '.join(cmd)}")
+                    subprocess.run(cmd, check=True, shell=False)
+                    logger.info(f"Final audio file created: {audio_path}")
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Error concatenating audio files: {e}")
+                finally:
+                    os.chdir(original_dir) # Change back to original directory
+                    # Clean up temporary audio files and concat list
+                    for temp_file in temp_audio_files:
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                    if os.path.exists(concat_list_path):
+                        os.remove(concat_list_path)
+                # --- End new logic ---
+
             else:
                 logger.info(f"Audio file already exists: {audio_path}")
         else:
@@ -130,55 +196,55 @@ def get_words_and_time(model, speech):
     return extract_word_timings(speech)
 
 def correct_subtitles(text_timestamped,interactive=False):
-  len_out = len(text_timestamped)
-  for i in range(len_out):
-    logger.info(f"{i}, {text_timestamped[i]}") # Python 3.6+ f-string
+    len_out = len(text_timestamped)
+    for i in range(len_out):
+        logger.info(f"{i}, {text_timestamped[i]}") # Python 3.6+ f-string
 
-  if not interactive:
-    logger.info("Skipping manual subtitle correction in non-interactive mode.")
-    return text_timestamped
-  else: # pragma: no cover
-    # This part seems to rely on 'ip' which is not defined. Assuming it's for interactive input.
-    # For non-interactive use, this branch isn't hit.
-    ip_input = input("Enter comma-separated corrections (index:new_word): ")
-    to_change = [(int(i.split(':')[0].strip()), i.split(':')[1].strip()) for i in ip_input.split(',')]
-    for ind, new_word in to_change:
-      logger.info(f'ind: {ind}, new_word: {new_word}')
-      # Original code was a bit unclear here. Assuming structure is {'word': [start, end]}
-      # This part needs to be robust to the actual structure of text_timestamped elements
-      if ind < len(text_timestamped) and isinstance(text_timestamped[ind], dict) and len(text_timestamped[ind].values()) == 1:
-          original_timing = list(text_timestamped[ind].values())[0]
-          text_timestamped[ind] = {new_word: original_timing} 
-      else:
-          logger.warning(f"Could not correct subtitle at index {ind}, data format issue or index out of bounds.")
-    logger.info(f'text_timestamped after correction: {text_timestamped}')
-    return text_timestamped
+    if not interactive:
+        logger.info("Skipping manual subtitle correction in non-interactive mode.")
+        return text_timestamped
+    else: # pragma: no cover
+        # This part seems to rely on 'ip' which is not defined. Assuming it's for interactive input.
+        # For non-interactive use, this branch isn't hit.
+        ip_input = input("Enter comma-separated corrections (index:new_word): ")
+        to_change = [(int(i.split(':')[0].strip()), i.split(':')[1].strip()) for i in ip_input.split(',')]
+        for ind, new_word in to_change:
+            logger.info(f'ind: {ind}, new_word: {new_word}')
+            # Original code was a bit unclear here. Assuming structure is {'word': [start, end]}
+            # This part needs to be robust to the actual structure of text_timestamped elements
+            if ind < len(text_timestamped) and isinstance(text_timestamped[ind], dict) and len(text_timestamped[ind].values()) == 1:
+                original_timing = list(text_timestamped[ind].values())[0]
+                text_timestamped[ind] = {new_word: original_timing}  
+            else:
+                logger.warning(f"Could not correct subtitle at index {ind}, data format issue or index out of bounds.")
+        logger.info(f'text_timestamped after correction: {text_timestamped}')
+        return text_timestamped
 
 def make_text_timestamped(audio_path, save_path):
-  try:
-    text_timestamped = get_words_and_time(WHISPER_MODEL, audio_path)
-    # text_timestamped = correct_subtitles(text_timestamped) # Assuming non-interactive for now
-    json.dump(text_timestamped, open(save_path, 'w'))
-    return text_timestamped
-  except Exception as e:
-    logger.info(f'Error making text timestamped: {e}')
+    try:
+        text_timestamped = get_words_and_time(WHISPER_MODEL, audio_path)
+        # text_timestamped = correct_subtitles(text_timestamped) # Assuming non-interactive for now
+        json.dump(text_timestamped, open(save_path, 'w'))
+        return text_timestamped
+    except Exception as e:
+        logger.info(f'Error making text timestamped: {e}')
 
 def generate_all_subtitles(base_path):
-  try:
-    dir_path = os.path.join(base_path)
-    audio_file = next((f for f in os.listdir(dir_path) if f.endswith(".mp3")), None)
-    if audio_file:
-        audio_path = os.path.join(dir_path, audio_file)
-        subtitles_path = os.path.join(base_path, "subtitles.json")
-        if not os.path.exists(subtitles_path):
-            logger.info(f"Generating subtitles for {audio_path}")
-            make_text_timestamped(audio_path, subtitles_path)
+    try:
+        dir_path = os.path.join(base_path)
+        audio_file = next((f for f in os.listdir(dir_path) if f.endswith(".mp3")), None)
+        if audio_file:
+            audio_path = os.path.join(dir_path, audio_file)
+            subtitles_path = os.path.join(base_path, "subtitles.json")
+            if not os.path.exists(subtitles_path):
+                logger.info(f"Generating subtitles for {audio_path}")
+                make_text_timestamped(audio_path, subtitles_path)
+            else:
+                logger.info(f"Subtitles file already exists: {subtitles_path}")
         else:
-            logger.info(f"Subtitles file already exists: {subtitles_path}")
-    else:
-        logger.warning(f"No MP3 file found in {dir_path} to generate subtitles.")
-  except Exception as e:
-    logger.info(f'Error generating all subtitles: {e}')
+            logger.warning(f"No MP3 file found in {dir_path} to generate subtitles.")
+    except Exception as e:
+        logger.info(f'Error generating all subtitles: {e}')
 
 # === SRT Creation ===
 def format_timestamp(t):
@@ -267,17 +333,17 @@ def calculate_image_durations_from_story(story_json_path, subtitles_json_path):
         for k, target_norm_word in enumerate(normalized_line_words):
             if subtitle_word_idx >= len(subtitles_data):
                 logger.warning(f"Ran out of subtitle words while matching line for image {i} (word '{target_norm_word}'): '{line_text}'")
-                break 
+                break  
             
             current_subtitle_norm_word = normalize_word(subtitles_data[subtitle_word_idx]['text'])
             
             if target_norm_word == current_subtitle_norm_word:
                 current_line_matched_subtitle_words.append(subtitles_data[subtitle_word_idx])
-                subtitle_word_idx += 1 
+                subtitle_word_idx += 1  
             else:
                 logger.warning(f"Word mismatch for image {i}, line '{line_text}'. Expected '{target_norm_word}', got '{current_subtitle_norm_word}' from subtitles. Line will be skipped.")
                 # Reset subtitle_word_idx to where it started for this line, so next line attempt isn't skewed
-                subtitle_word_idx = initial_subtitle_word_idx_for_this_line 
+                subtitle_word_idx = initial_subtitle_word_idx_for_this_line  
                 current_line_matched_subtitle_words = [] # Invalidate matches for this line
                 break # Stop processing this line
 
@@ -430,9 +496,9 @@ def run_pipeline(base_path, ffmpeg_executable_path: str = "ffmpeg"):
         logger.error(f"Audio file {audio_file_abs} not found. Cannot create video.")
         return
     if not os.path.exists(srt_file_abs) and image_specs: # SRT is needed if we have images/durations
-         logger.warning(f"SRT file {srt_file_abs} not found. Video will be attempted without subtitles if ffmpeg allows, or may fail.")
-         # Consider if subtitles are mandatory. The -vf filter will fail if srt_filename_relative points to a non-existent file.
-         # For now, we let it try. A robust way is to remove the -vf filter from cmd if srt_file_abs doesn't exist.
+          logger.warning(f"SRT file {srt_file_abs} not found. Video will be attempted without subtitles if ffmpeg allows, or may fail.")
+          # Consider if subtitles are mandatory. The -vf filter will fail if srt_filename_relative points to a non-existent file.
+          # For now, we let it try. A robust way is to remove the -vf filter from cmd if srt_file_abs doesn't exist.
 
     create_video_from_images_with_audio(
         image_dir=base_path,
