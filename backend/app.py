@@ -50,7 +50,7 @@ def worker():
             continue
         item = request_queue.get()
  
-        story_prompt, story_name = item
+        story_prompt, story_name, topic = item
         try:
             logger.info(f"[Worker] Processing story: {story_name}")
             processor.run(story_prompt, story_name,topic)
