@@ -14,6 +14,7 @@ st.title("🧠 Story-to-Reel Generator")
 
 story_prompt = st.text_area("Enter your story prompt:")
 story_name = st.text_input("Enter a name for your story:")
+topic = story_name = st.text_input("Enter a topic for your story:")
 
 if st.button("Generate Story"):
     if not story_prompt or not story_name:
@@ -24,9 +25,10 @@ if st.button("Generate Story"):
                 # Encode the story prompt and name for safe URL usage
                 encoded_prompt = urllib.parse.quote(story_prompt)
                 encoded_name = urllib.parse.quote(story_name)
+                encoded_topic = urllib.parse.quote(topic)
 
                 # Construct the URL
-                url = f"{FLASK_API_BASE_URL}/generate/{encoded_prompt}/{encoded_name}/"
+                url = f"{FLASK_API_BASE_URL}/generate/{encoded_prompt}/{encoded_name}/{encoded_topic}/"
 
                 # Send POST request
                 response = requests.post(
