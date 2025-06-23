@@ -53,7 +53,7 @@ def worker():
         story_prompt, story_name = item
         try:
             logger.info(f"[Worker] Processing story: {story_name}")
-            processor.run(story_prompt, story_name)
+            processor.run(story_prompt, story_name,topic)
             run_pipeline(f"{story_name}")
             logger.info(f"[Worker] Completed: {story_name}")
            
@@ -65,13 +65,13 @@ def worker():
 worker_thread = threading.Thread(target=worker, daemon=True)
 worker_thread.start()
 
-@app.route("/generate/<string:story_prompt>/<string:story_name>/", methods=["GET", "POST"])
+@app.route("/generate/<string:story_prompt>/<string:story_name>/<string:topic>", methods=["GET", "POST"])
 def generate(story_prompt, story_name):
     if not story_prompt or not story_name:
         return jsonify({"error": "Missing story_prompt or story_name"}), 400
 
     try:
-        request_queue.put((story_prompt, story_name))
+        request_queue.put((story_prompt, story_name, topic))
         return jsonify({"status": "queued", "message": f"Story '{story_name}' added to queue."})
     except Exception as e:
         logger.error(f"Error queuing story: {e}")
