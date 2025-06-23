@@ -32,7 +32,7 @@ VOICE_IDS = {
     "adam": "aura-zeus-en"
 }
 API_KEY_DEEPGRAM = os.getenv("DEEPGRAM_API_KEY")
-DEEPGRAM_MAX_CHARS = 2000 # Deepgram's character limit
+DEEPGRAM_MAX_CHARS = 2000 # Deepgram's character limit for single requests
 
 device1 = "cuda" if torch.cuda.is_available() else "cpu"
 WHISPER_MODEL = whisper.load_model("large", device=device1)
@@ -92,7 +92,8 @@ def generate_audio_files(base_path, voice_name="adam"):
                 chunk_index = 0
 
                 for line in story_lines:
-                    if len(current_chunk) + len(line) + 1 <= DEEPGRAM_MAX_CHARS: # +1 for potential space
+                    # Add 1 for a potential space between lines if concatenating
+                    if len(current_chunk) + len(line) + (1 if current_chunk else 0) <= DEEPGRAM_MAX_CHARS:
                         current_chunk += (line + " ")
                     else:
                         if current_chunk: # Process the current chunk if not empty
@@ -198,20 +199,16 @@ def get_words_and_time(model, speech):
 def correct_subtitles(text_timestamped,interactive=False):
     len_out = len(text_timestamped)
     for i in range(len_out):
-        logger.info(f"{i}, {text_timestamped[i]}") # Python 3.6+ f-string
+        logger.info(f"{i}, {text_timestamped[i]}")
 
     if not interactive:
         logger.info("Skipping manual subtitle correction in non-interactive mode.")
         return text_timestamped
     else: # pragma: no cover
-        # This part seems to rely on 'ip' which is not defined. Assuming it's for interactive input.
-        # For non-interactive use, this branch isn't hit.
         ip_input = input("Enter comma-separated corrections (index:new_word): ")
         to_change = [(int(i.split(':')[0].strip()), i.split(':')[1].strip()) for i in ip_input.split(',')]
         for ind, new_word in to_change:
             logger.info(f'ind: {ind}, new_word: {new_word}')
-            # Original code was a bit unclear here. Assuming structure is {'word': [start, end]}
-            # This part needs to be robust to the actual structure of text_timestamped elements
             if ind < len(text_timestamped) and isinstance(text_timestamped[ind], dict) and len(text_timestamped[ind].values()) == 1:
                 original_timing = list(text_timestamped[ind].values())[0]
                 text_timestamped[ind] = {new_word: original_timing}  
@@ -223,7 +220,6 @@ def correct_subtitles(text_timestamped,interactive=False):
 def make_text_timestamped(audio_path, save_path):
     try:
         text_timestamped = get_words_and_time(WHISPER_MODEL, audio_path)
-        # text_timestamped = correct_subtitles(text_timestamped) # Assuming non-interactive for now
         json.dump(text_timestamped, open(save_path, 'w'))
         return text_timestamped
     except Exception as e:
@@ -281,17 +277,31 @@ def generate_srt_files(base_path):
     except Exception as e:
         logger.info(f'Error generating srt files: {e}')
 
-# === Dynamic Image Duration Calculation ===
+# --- New/Improved normalize_word function ---
 def normalize_word(word):
-    # Lowercase and remove punctuation (keeps apostrophes if part of word logic)
-    return re.sub(r"[^\w\s']", '', word).lower().strip()
+    """
+    Normalizes a word for comparison by converting to lowercase,
+    removing punctuation from start/end, removing hyphens, and
+    removing any internal spaces (e.g., for split contractions).
+    """
+    word = word.lower()
+    # Remove punctuation from start/end of word, but allow internal apostrophes
+    word = re.sub(r"^[^\w\d']+|[^\w\d']+$", "", word)
+    # Remove hyphens for matching (e.g., "once-vibrant" -> "oncevibrant")
+    word = word.replace("-", "")
+    # Remove any internal spaces, making "do not" -> "donot"
+    word = re.sub(r"\s+", "", word).strip()
+    return word
+# --- End of New/Improved normalize_word function ---
 
+
+# === Dynamic Image Duration Calculation ===
 def calculate_image_durations_from_story(story_json_path, subtitles_json_path):
     logger.info(f"Calculating image durations from story: {story_json_path} and subtitles: {subtitles_json_path}")
     try:
-        with open(story_json_path, 'r', encoding='utf-8') as f: # Added encoding
+        with open(story_json_path, 'r', encoding='utf-8') as f:
             story_data = json.load(f)
-        with open(subtitles_json_path, 'r', encoding='utf-8') as f: # Added encoding
+        with open(subtitles_json_path, 'r', encoding='utf-8') as f:
             subtitles_data = json.load(f)
     except FileNotFoundError as e:
         logger.error(f"Error loading JSON files for duration calculation: {e}")
@@ -318,6 +328,7 @@ def calculate_image_durations_from_story(story_json_path, subtitles_json_path):
             logger.warning(f"Image prompt {i} has no line text. Skipping.")
             continue
 
+        # Split the line text into words and normalize each
         line_words_original = line_text.split()
         normalized_line_words = [normalize_word(w) for w in line_words_original if normalize_word(w)]
 
@@ -328,26 +339,27 @@ def calculate_image_durations_from_story(story_json_path, subtitles_json_path):
         num_words_in_current_line = len(normalized_line_words)
         
         current_line_matched_subtitle_words = []
-        initial_subtitle_word_idx_for_this_line = subtitle_word_idx # Store for potential reset if line fails
+        initial_subtitle_word_idx_for_this_line = subtitle_word_idx
 
+        # Attempt to match words from the normalized line against the subtitles
+        line_match_successful = True
         for k, target_norm_word in enumerate(normalized_line_words):
             if subtitle_word_idx >= len(subtitles_data):
                 logger.warning(f"Ran out of subtitle words while matching line for image {i} (word '{target_norm_word}'): '{line_text}'")
-                break  
+                line_match_successful = False
+                break
             
             current_subtitle_norm_word = normalize_word(subtitles_data[subtitle_word_idx]['text'])
             
             if target_norm_word == current_subtitle_norm_word:
                 current_line_matched_subtitle_words.append(subtitles_data[subtitle_word_idx])
-                subtitle_word_idx += 1  
+                subtitle_word_idx += 1
             else:
                 logger.warning(f"Word mismatch for image {i}, line '{line_text}'. Expected '{target_norm_word}', got '{current_subtitle_norm_word}' from subtitles. Line will be skipped.")
-                # Reset subtitle_word_idx to where it started for this line, so next line attempt isn't skewed
-                subtitle_word_idx = initial_subtitle_word_idx_for_this_line  
-                current_line_matched_subtitle_words = [] # Invalidate matches for this line
-                break # Stop processing this line
+                line_match_successful = False
+                break
 
-        if len(current_line_matched_subtitle_words) == num_words_in_current_line:
+        if line_match_successful and len(current_line_matched_subtitle_words) == num_words_in_current_line:
             line_start_time = current_line_matched_subtitle_words[0]['start']
             line_end_time = current_line_matched_subtitle_words[-1]['end']
             duration = line_end_time - line_start_time
@@ -360,10 +372,26 @@ def calculate_image_durations_from_story(story_json_path, subtitles_json_path):
                 'filename': f"{i}.png", 
                 'duration': duration
             })
-        elif normalized_line_words: # Only log error if there were words to match
-             logger.error(f"Failed to match all words for image {i}, line '{line_text}'. Matched {len(current_line_matched_subtitle_words)}/{num_words_in_current_line}. Skipping duration for this image.")
-             # subtitle_word_idx was already reset if mismatch occurred, or it correctly points to the start of the next segment if loop completed partially.
-
+        else:
+            # If the line didn't match, we need to reset subtitle_word_idx for the next image's line
+            # to prevent a cascade of mismatches if Deepgram's output is out of sync.
+            # This is a heuristic and might need adjustment based on typical ASR errors.
+            # For simplicity, if a full line doesn't match, we'll try to find the starting point
+            # of the *next* expected line in the subtitles to re-sync.
+            logger.error(f"Failed to match all words for image {i}, line '{line_text}'. Matched {len(current_line_matched_subtitle_words)}/{num_words_in_current_line}. Skipping duration for this image.")
+            
+            # Attempt to re-sync: find the first word of the next *story line* in the subtitles
+            # This is a complex problem and a simple reset might not always be perfect.
+            # For now, let's just leave subtitle_word_idx where it is if a mismatch occurred
+            # or try to find the start of the next expected line.
+            # The current 'break' statement already prevents advancing subtitle_word_idx on mismatch.
+            # The 'initial_subtitle_word_idx_for_this_line' was intended for this, but it was not used for reset.
+            # Let's adjust the logic slightly to explicitly revert if the line doesn't match.
+            subtitle_word_idx = initial_subtitle_word_idx_for_this_line # Revert for this line if it failed to match completely.
+            
+            # A more robust re-sync might look ahead in the subtitles for the start of the *next* story line,
+            # but that adds significant complexity. Sticking to current logic for now, with better logging.
+            
     if not image_specs:
         logger.error("No image durations could be calculated successfully.")
     return image_specs
@@ -406,14 +434,21 @@ def create_video_from_images_with_audio(
         
         logger.info(f"Generated ffmpeg concat file: {concat_filename} with {len(image_specs)} entries.")
 
+        # Check if SRT file exists before adding subtitle filter
+        subtitle_filter = []
+        if os.path.exists(srt_filename_relative):
+            subtitle_filter = ["-vf", f"subtitles={srt_filename_relative}"]
+        else:
+            logger.warning(f"SRT file {srt_filename_relative} not found. Video will be created without subtitles.")
+
         cmd = [
             ffmpeg_executable_path,
             "-y",
             "-f", "concat",
-            "-safe", "0", # Needed if paths in concat file are relative outside current dir, or absolute. Here, they are relative to image_dir.
-            "-i", concat_filename, # Input from concat file
+            "-safe", "0",
+            "-i", concat_filename,
             "-i", audio_filename_relative,
-            "-vf", f"subtitles={srt_filename_relative}",
+        ] + subtitle_filter + [ # Add subtitle filter conditionally
             "-c:v", "libx264",
             "-c:a", "aac",
             "-strict", "experimental",
@@ -432,7 +467,7 @@ def create_video_from_images_with_audio(
         logger.error(f"Command was: {' '.join(e.cmd)}" if hasattr(e, 'cmd') else "Command details not available.")
         if e.stdout: logger.error(f"ffmpeg stdout: {e.stdout.decode(errors='ignore')}")
         if e.stderr: logger.error(f"ffmpeg stderr: {e.stderr.decode(errors='ignore')}")
-    except FileNotFoundError: # For ffmpeg executable
+    except FileNotFoundError:
         logger.error(f"[✗] Error: The ffmpeg executable ('{ffmpeg_executable_path}') was not found.")
     except Exception as e:
         logger.error(f"[✗] An unexpected error occurred during video creation: {e}")
@@ -454,16 +489,16 @@ def run_pipeline(base_path, ffmpeg_executable_path: str = "ffmpeg"):
     generate_audio_files(base_path)
 
     logger.info("Creating subtitles JSON...")
-    generate_all_subtitles(base_path) # This generates subtitles.json
+    generate_all_subtitles(base_path)
 
     logger.info("Exporting SRT files...")
-    generate_srt_files(base_path) # This generates subtitles.srt
+    generate_srt_files(base_path)
 
     # Calculate dynamic image durations
     json_files = [f for f in os.listdir(base_path) if f.endswith(".json")]
     story_json_filename = None
     for fname in json_files:
-        if fname.lower() != "subtitles.json": # case-insensitive check
+        if fname.lower() != "subtitles.json":
             story_json_filename = fname
             break
     
@@ -488,26 +523,22 @@ def run_pipeline(base_path, ffmpeg_executable_path: str = "ffmpeg"):
         return
 
     logger.info("Creating video with dynamic durations...")
-    audio_file_abs = os.path.join(base_path, "adam.mp3") # Assuming default voice/filename
+    audio_file_abs = os.path.join(base_path, "adam.mp3")
     srt_file_abs = os.path.join(base_path, "subtitles.srt")
-    output_video_abs = os.path.join(base_path, "story_video_dynamic.mp4") # New output name
+    output_video_abs = os.path.join(base_path, "story_video_dynamic.mp4")
 
     if not os.path.exists(audio_file_abs):
         logger.error(f"Audio file {audio_file_abs} not found. Cannot create video.")
         return
-    if not os.path.exists(srt_file_abs) and image_specs: # SRT is needed if we have images/durations
-          logger.warning(f"SRT file {srt_file_abs} not found. Video will be attempted without subtitles if ffmpeg allows, or may fail.")
-          # Consider if subtitles are mandatory. The -vf filter will fail if srt_filename_relative points to a non-existent file.
-          # For now, we let it try. A robust way is to remove the -vf filter from cmd if srt_file_abs doesn't exist.
-
+    
+    # The create_video_from_images_with_audio function now handles the SRT file existence check internally.
     create_video_from_images_with_audio(
         image_dir=base_path,
         audio_file_abs=audio_file_abs,
-        srt_file_abs=srt_file_abs, # Will be used by ffmpeg
+        srt_file_abs=srt_file_abs,
         output_file_abs=output_video_abs,
-        image_specs=image_specs, # Pass the calculated specs
+        image_specs=image_specs,
         ffmpeg_executable_path=ffmpeg_executable_path
-        # video_fps is defaulted in the function
     )
 
 # === Main ===
