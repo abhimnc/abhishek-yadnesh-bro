@@ -14,7 +14,7 @@ st.title("🧠 Story-to-Reel Generator")
 
 story_prompt = st.text_area("Enter your story prompt:")
 story_name = st.text_input("Enter a name for your story:")
-topic = story_name = st.text_input("Enter a topic for your story:")
+topic = st.text_input("Enter a topic for your story:")
 
 if st.button("Generate Story"):
     if not story_prompt or not story_name:
