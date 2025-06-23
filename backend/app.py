@@ -66,7 +66,7 @@ worker_thread = threading.Thread(target=worker, daemon=True)
 worker_thread.start()
 
 @app.route("/generate/<string:story_prompt>/<string:story_name>/<string:topic>", methods=["GET", "POST"])
-def generate(story_prompt, story_name):
+def generate(story_prompt, story_name, topic):
     if not story_prompt or not story_name:
         return jsonify({"error": "Missing story_prompt or story_name"}), 400
 
