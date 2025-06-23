@@ -28,7 +28,7 @@ if st.button("Generate Story"):
                 encoded_topic = urllib.parse.quote(topic)
 
                 # Construct the URL
-                url = f"{FLASK_API_BASE_URL}/generate/{encoded_prompt}/{encoded_name}/{encoded_topic}/"
+                url = f"{FLASK_API_BASE_URL}/generate/{encoded_prompt}/{encoded_name}/{encoded_topic}"
 
                 # Send POST request
                 response = requests.post(
