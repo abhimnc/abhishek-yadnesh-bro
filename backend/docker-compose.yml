@@ -6,15 +6,5 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - 5000:5000
+      - 5151:5151
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-      - INTERACTIVE=true
-    runtime: nvidia
