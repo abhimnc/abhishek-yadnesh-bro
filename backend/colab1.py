@@ -8,43 +8,39 @@ import logging
 
 dotenv.load_dotenv()
 
-# Import logger from app if possible, otherwise set up a fallback
-try:
-    from .app import logger
-except ImportError:
-    # Fallback if run directly (not through app.py)
-    logger = logging.getLogger("story_generator")
-    if not logger.handlers:
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[logging.StreamHandler()]
-        )
+# === Logging Config ===
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
-# Initialize OpenAI client
+# === OpenAI Client ===
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Stability API Key
+# === Stability AI Config ===
 STABILITY_API_KEY = os.getenv("STABILITY_API_KEY")
 STABILITY_API_URL = os.getenv("STABILITY_API_URL")
-# --- STORY GENERATOR ---
+
+# --- STORY GENERATOR PROMPT ---
 
 story_prompt = """
-    I have listed down some essential elements of writing an engaging short inspirational story.
-    ### Essential Elements of an Engaging Short Inspirational Story
+I have listed down some essential elements of writing an engaging short inspirational story.
+### Essential Elements of an Engaging Short Inspirational Story
 
-    1. **Universal Theme**: A theme that resonates with a wide audience, often involving perseverance, hope, or change.
-    2. **Clear Conflict or Challenge**: A problem or obstacle that is faced by the audience.
-    3. **Positive Resolution**: The story provide a positive resolution and should end on a hopeful or uplifting note.
-    4. **Emotional Engagement**: The story should evoke emotions, making the reader feel invested in the outcome.
-    5. **Concise and Focused**: The story should be succinct, with every element contributing to the overall message.
+1. **Universal Theme**
+2. **Clear Conflict or Challenge**
+3. **Positive Resolution**
+4. **Emotional Engagement**
+5. **Concise and Focused**
 
-    Now keeping in mind these elements, write an inspirational short story for the topic: {topic}
+Now keeping in mind these elements, write an inspirational short story for the topic: {topic}
 
-    PLEASE KEEP THE STORY CRISP AND SHORT.
+PLEASE KEEP THE STORY CRISP AND SHORT.
 
-    Story script:
-    """
+Story script:
+"""
+
+# --- STORY GENERATOR ---
 
 class StoryGenerator:
     def __init__(self, model="gpt-4o", temperature=0.1):
@@ -56,15 +52,22 @@ class StoryGenerator:
             response = client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert story writer who writes short inspirational stories."},
-                    {"role": "user", "content": prompt.format(topic=topic)}
+                    {
+                        "role": "system",
+                        "content": "You are an expert story writer who writes short inspirational stories."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt.format(topic=topic)
+                    }
                 ],
                 temperature=self.temperature
             )
-            logger.info(f"Story generated: {response.choices[0].message.content}")
-            return response.choices[0].message.content
+            story = response.choices[0].message.content
+            logging.info(f"Story generated successfully")
+            return story
         except Exception as e:
-            logger.info("Error generating story:", e)
+            logging.info(f"Error generating story: {e}")
             raise
 
 # --- IMAGE PROMPT GENERATOR ---
@@ -76,19 +79,19 @@ class ImagePromptGenerator:
 
     def generate_image_prompts(self, story_script: str) -> list:
         image_prompt = f"""
-        You have been given a story script below, and you have to create images for the script which will be converted to a video.
-        For each line in the script given below, give an image prompt that captures the line visually.
-        Use words such as sharp focus and extremely detailed that result in great images.
-        Create simple image prompts and do not use a person's name in the prompt.
+You have been given a story script below, and you have to create images for the script which will be converted to a video.
+For each line in the script given below, give an image prompt that captures the line visually.
+Use words such as sharp focus and extremely detailed that result in great images.
+Create simple image prompts and do not use a person's name in the prompt.
 
-        Complete story script:
-        '''{story_script}'''
+Complete story script:
+'''{story_script}'''
 
-        Output should be in JSON format:
-        [{{"line": "", "image_prompt": ""}}, ...]
+Output should be in JSON format:
+[{{"line": "", "image_prompt": ""}}, ...]
 
-        Only return the JSON array, nothing else.
-        """
+Only return the JSON array, nothing else.
+"""
 
         try:
             response = client.chat.completions.create(
@@ -99,19 +102,22 @@ class ImagePromptGenerator:
                 ],
                 temperature=self.temperature
             )
+
             raw_content = response.choices[0].message.content.strip()
 
             if raw_content.startswith("```json"):
                 raw_content = raw_content.lstrip("```json").rstrip("```").strip()
             elif raw_content.startswith("```"):
                 raw_content = raw_content.lstrip("```").rstrip("```").strip()
-            logger.info(f"Image prompts generated: {raw_content}")
+
+            logging.info("Image prompts generated successfully")
             return json.loads(raw_content)
+
         except Exception as e:
-            logger.info("Error generating image prompts:", e)
+            logging.info(f"Error generating image prompts: {e}")
             raise
 
-# --- IMAGE GENERATOR ---
+# --- IMAGE GENERATION ---
 
 def make_body(prompt):
     return {
@@ -138,7 +144,7 @@ def make_image(prompt, img_path):
 
     response = requests.post(STABILITY_API_URL, headers=headers, json=body)
     if response.status_code != 200:
-        raise Exception("Non-200 response: " + str(response.text))
+        raise Exception(f"Non-200 response: {response.text}")
 
     data = response.json()
     for image in data["artifacts"]:
@@ -163,26 +169,28 @@ class StoryProcessor:
 
     def run(self, story_prompt: str, story_name: str, topic: str):
         story, image_prompts = self.process_story(story_prompt, topic)
+
         story_dir = f"./{story_name}"
         os.makedirs(story_dir, exist_ok=True)
 
-        # Save story & prompts
-        self.save_to_file(os.path.join(story_dir, f"{story_name}.json"), {
-            "story": story,
-            "image_prompts": image_prompts
-        })
+        self.save_to_file(
+            os.path.join(story_dir, f"{story_name}.json"),
+            {
+                "story": story,
+                "image_prompts": image_prompts
+            }
+        )
 
-        # Generate images
         for i, item in enumerate(image_prompts):
             prompt = item["image_prompt"]
             img_path = os.path.join(story_dir, f"{i}.png")
-            logger.info(f"Generating image for prompt: {prompt}")   
+            logging.info(f"Generating image {i}: {prompt}")
             make_image(prompt, img_path)
-            logger.info(f"Image generated: {img_path}")
+            logging.info(f"Image saved: {img_path}")
 
-        logger.info(f"✅ Story and images saved in {story_dir}")
+        logging.info(f"✅ Story and images saved in {story_dir}")
 
-# --- MAIN EXECUTION ---
+# --- MAIN ---
 
 if __name__ == "__main__":
     story_name = "mindset_story"
@@ -191,4 +199,8 @@ if __name__ == "__main__":
     image_gen = ImagePromptGenerator()
     processor = StoryProcessor(story_gen, image_gen)
 
-    processor.run(story_prompt, story_name, topic="Book Mindset by Carol Dweck")
+    processor.run(
+        story_prompt=story_prompt,
+        story_name=story_name,
+        topic="Book Mindset by Carol Dweck"
+    )

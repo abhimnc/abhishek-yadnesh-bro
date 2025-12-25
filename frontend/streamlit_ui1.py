@@ -8,7 +8,7 @@ import urllib.parse
 dotenv.load_dotenv()
 
 # Get base URL from environment
-FLASK_API_BASE_URL = os.getenv("FLASK_API_BASE_URL", "http://35.192.14.249:5000")
+FLASK_API_BASE_URL = os.getenv("FLASK_API_BASE_URL", "http://0.0.0.0:5151")
 
 st.title("🧠 Story-to-Reel Generator")
 

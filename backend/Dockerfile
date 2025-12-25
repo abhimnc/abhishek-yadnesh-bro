@@ -24,5 +24,5 @@ COPY . .
 RUN pip install flask
 
 RUN rm -rf /root/.cache/whisper/*
-EXPOSE 5000
+EXPOSE 5151
 CMD ["python", "app.py"]
