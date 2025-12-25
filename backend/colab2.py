@@ -298,7 +298,8 @@ def generate_video_from_subtitles(
     try:
         audio_file = f"{voice_name}.mp3"
         subtitle_json = os.path.join(base_path, "subtitles.json")
-        story_json = os.path.join(base_path, "lion.json")
+        # story_json = os.path.join(base_path, "lion.json")
+        story_json = os.path.join(base_path, os.path.basename(base_path) + ".json")
 
         if not all(os.path.exists(os.path.join(base_path, f)) for f in [audio_file]):
             logging.error("Audio file missing")
