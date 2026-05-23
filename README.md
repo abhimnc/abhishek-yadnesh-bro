@@ -1,13 +1,3 @@
-Create a .env file and specify following env variables
-FLASK_API_BASE_URL=
-OPENAI_API_KEY=
-DEEPGRAM_API_KEY=
+<img width="1834" height="1428" alt="image" src="https://github.com/user-attachments/assets/cc831f02-178d-4bae-8755-247f3da3cac8" />
 
-To run backend:
-pip install -r requirements.txt
-cd backend
-python main.py
-
-To run frontend:
-cd frontend
-streamlit run streamlit_ui1.py
+ To Run: sudo docker-compose -f docker-compose.yml up --build
